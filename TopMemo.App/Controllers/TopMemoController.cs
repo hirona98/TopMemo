@@ -78,8 +78,8 @@ public sealed class TopMemoController : IDisposable
 
         // エディタ表示設定を反映します。
         _window.BindTabs(_tabs);
-        _window.HideEditor();
         SelectInitialTab();
+        ShowEditor();
 
         // 自動起動状態を初期化します。
         InitializeAutoStartState();

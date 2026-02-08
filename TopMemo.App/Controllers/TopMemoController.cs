@@ -1,0 +1,587 @@
+using System.Collections.ObjectModel;
+using System.Linq;
+using TopMemo.App.Models;
+using TopMemo.App.Services;
+using TopMemo.App.ViewModels;
+using TopMemo.App.Views;
+using WpfApplication = System.Windows.Application;
+using WpfMessageBox = System.Windows.MessageBox;
+using WpfMessageBoxButton = System.Windows.MessageBoxButton;
+using WpfMessageBoxImage = System.Windows.MessageBoxImage;
+using WpfMessageBoxResult = System.Windows.MessageBoxResult;
+
+namespace TopMemo.App.Controllers;
+
+/// <summary>
+/// TopMemo の画面・保存・常駐制御を統括するコントローラです。
+/// </summary>
+public sealed class TopMemoController : IDisposable
+{
+    private readonly WpfApplication _application;
+    private readonly MainWindow _window;
+    private readonly FilePathService _filePathService;
+    private readonly LoggingService _loggingService;
+    private readonly JsonStorageService _storageService;
+    private readonly TabFileNameService _tabFileNameService;
+    private readonly MarkdownHighlightService _markdownHighlightService;
+    private readonly LinkNavigationService _linkNavigationService;
+    private readonly TaskViewInputService _taskViewInputService;
+    private readonly TrayService _trayService;
+    private readonly StartupRegistrationService _startupRegistrationService;
+    private readonly ObservableCollection<MemoTabViewModel> _tabs = [];
+    private AppSettings _settings;
+    private HotZoneMonitorService? _hotZoneMonitorService;
+    private MemoTabViewModel? _activeTab;
+    private bool _isExiting;
+
+    /// <summary>
+    /// 初期化します。
+    /// </summary>
+    /// <param name="application">WPF アプリケーション。</param>
+    /// <param name="window">メインウィンドウ。</param>
+    public TopMemoController(WpfApplication application, MainWindow window)
+    {
+        // 必須依存を保持します。
+        _application = application;
+        _window = window;
+
+        // 保存とログの基盤を初期化します。
+        _filePathService = new FilePathService();
+        var bootstrapLogger = new LoggingService(_filePathService, maxFileSizeKb: 100);
+        var bootstrapStorage = new JsonStorageService(_filePathService, bootstrapLogger);
+        _settings = bootstrapStorage.LoadSettingsOrCreate();
+        _loggingService = new LoggingService(_filePathService, _settings.Logging.MaxFileSizeKb);
+        _storageService = new JsonStorageService(_filePathService, _loggingService);
+
+        // 補助サービスを初期化します。
+        _tabFileNameService = new TabFileNameService(_storageService);
+        _markdownHighlightService = new MarkdownHighlightService();
+        _linkNavigationService = new LinkNavigationService();
+        _taskViewInputService = new TaskViewInputService();
+        _trayService = new TrayService();
+        _startupRegistrationService = new StartupRegistrationService();
+    }
+
+    /// <summary>
+    /// 起動処理を実行します。
+    /// </summary>
+    public void Initialize()
+    {
+        // タブ定義と本文を読み込みます。
+        LoadTabs();
+
+        // 画面イベントを接続します。
+        WireWindowEvents();
+        WireTrayEvents();
+
+        // エディタ表示設定を反映します。
+        _window.BindTabs(_tabs);
+        _markdownHighlightService.Apply(_window.Editor);
+        _window.HideEditor();
+        SelectInitialTab();
+
+        // 自動起動状態を初期化します。
+        InitializeAutoStartState();
+
+        // ホットゾーン監視を開始します。
+        _hotZoneMonitorService = new HotZoneMonitorService(_settings, () => _window.IsEditorVisible, () => _window.TryGetWindowRect());
+        _hotZoneMonitorService.ShowZoneEntered += ShowEditor;
+        _hotZoneMonitorService.TaskViewZoneEntered += HandleTaskViewRequest;
+        _hotZoneMonitorService.EditorExited += HideEditorAndSave;
+        _hotZoneMonitorService.Start();
+    }
+
+    /// <summary>
+    /// 外部インスタンスからの表示要求を処理します。
+    /// </summary>
+    public void ShowEditor()
+    {
+        // 既に表示中なら前面化だけ行います。
+        if (_window.IsEditorVisible)
+        {
+            _window.Activate();
+            return;
+        }
+
+        // 表示前に選択タブ本文をエディタへ反映します。
+        if (_activeTab is not null)
+        {
+            _window.SelectTab(_activeTab);
+            _window.SetEditorText(_activeTab.Content);
+        }
+
+        // 設定座標でエディタを表示します。
+        _window.ShowEditor(
+            _settings.EditorWindow.X,
+            _settings.EditorWindow.Y,
+            _settings.EditorWindow.Width,
+            _settings.EditorWindow.Height,
+            _settings.Behavior.TopMost);
+    }
+
+    /// <summary>
+    /// アプリ終了処理を実行します。
+    /// </summary>
+    public void RequestExit()
+    {
+        // 多重終了を防止します。
+        if (_isExiting)
+        {
+            return;
+        }
+
+        _isExiting = true;
+
+        try
+        {
+            // 終了前保存を実行します。
+            SaveDirtyTabs();
+            PersistWindowPlacement();
+            SaveTabsState();
+            _storageService.SaveSettings(_settings);
+        }
+        catch (Exception exception)
+        {
+            // 終了前保存失敗を記録します。
+            _loggingService.Error("終了前保存で例外が発生しました。", exception);
+        }
+        finally
+        {
+            // 監視とトレイを停止して終了します。
+            _hotZoneMonitorService?.Dispose();
+            _trayService.Dispose();
+            _window.CloseForExit();
+            _application.Shutdown();
+        }
+    }
+
+    /// <summary>
+    /// リソースを解放します。
+    /// </summary>
+    public void Dispose()
+    {
+        // 終了時に必要なサービスを解放します。
+        _hotZoneMonitorService?.Dispose();
+        _trayService.Dispose();
+    }
+
+    /// <summary>
+    /// 起動時のタブデータを読み込みます。
+    /// </summary>
+    private void LoadTabs()
+    {
+        // tabs.json と memo 本文を読み込みます。
+        var tabsState = _storageService.LoadTabsOrCreate();
+        _tabs.Clear();
+        foreach (var definition in tabsState.Tabs)
+        {
+            _tabs.Add(new MemoTabViewModel
+            {
+                Id = definition.Id,
+                Title = definition.Title,
+                FileName = definition.FileName,
+                Content = _storageService.LoadMemo(definition.FileName),
+                IsDirty = false
+            });
+        }
+
+        // アクティブタブを復元します。
+        _activeTab = _tabs.FirstOrDefault(tab => tab.Id == tabsState.ActiveTabId) ?? _tabs.First();
+    }
+
+    /// <summary>
+    /// 初期選択タブを反映します。
+    /// </summary>
+    private void SelectInitialTab()
+    {
+        // 起動時タブを選択し本文を表示します。
+        if (_activeTab is null)
+        {
+            return;
+        }
+
+        _window.SelectTab(_activeTab);
+        _window.SetEditorText(_activeTab.Content);
+    }
+
+    /// <summary>
+    /// 画面イベントを接続します。
+    /// </summary>
+    private void WireWindowEvents()
+    {
+        // タブ追加・改名・削除イベントを接続します。
+        _window.AddTabRequested += HandleAddTabRequested;
+        _window.RenameTabRequested += HandleRenameTabRequested;
+        _window.DeleteTabRequested += HandleDeleteTabRequested;
+
+        // 編集と表示制御イベントを接続します。
+        _window.SelectedTabChanged += HandleSelectedTabChanged;
+        _window.EditorTextChanged += HandleEditorTextChanged;
+        _window.HideRequested += HideEditorAndSave;
+        _window.LinkOpenRequested += HandleLinkOpenRequested;
+    }
+
+    /// <summary>
+    /// トレイイベントを接続します。
+    /// </summary>
+    private void WireTrayEvents()
+    {
+        // トレイ操作イベントを接続します。
+        _trayService.ToggleWindowRequested += HandleToggleWindowRequested;
+        _trayService.AutoStartToggled += HandleAutoStartToggled;
+        _trayService.ExitRequested += RequestExit;
+    }
+
+    /// <summary>
+    /// 起動時の自動起動状態を反映します。
+    /// </summary>
+    private void InitializeAutoStartState()
+    {
+        // 設定上有効なら登録を試行します。
+        if (_settings.Behavior.AutoStartEnabled)
+        {
+            var enabled = _startupRegistrationService.Enable(
+                _settings.Startup.AllowRegistryFallback,
+                out var provider,
+                out var errorMessage);
+
+            if (enabled)
+            {
+                _settings.Startup.LastProvider = provider;
+            }
+            else
+            {
+                _settings.Behavior.AutoStartEnabled = false;
+                _settings.Startup.LastProvider = "None";
+                _loggingService.Error($"自動起動の有効化に失敗しました。{errorMessage}");
+            }
+        }
+
+        // トレイのチェック状態を同期します。
+        _trayService.SetAutoStartState(_settings.Behavior.AutoStartEnabled);
+    }
+
+    /// <summary>
+    /// 表示/非表示トグル要求を処理します。
+    /// </summary>
+    private void HandleToggleWindowRequested()
+    {
+        // 表示中なら保存して非表示、非表示なら表示します。
+        if (_window.IsEditorVisible)
+        {
+            HideEditorAndSave();
+        }
+        else
+        {
+            ShowEditor();
+        }
+    }
+
+    /// <summary>
+    /// タブ追加要求を処理します。
+    /// </summary>
+    private void HandleAddTabRequested()
+    {
+        // タブ切替前に未保存内容を保存します。
+        SaveDirtyTabs();
+
+        // 既定タイトルからユニークなファイル名を生成します。
+        var title = "memo";
+        var fileName = _tabFileNameService.BuildUniqueFileName(title, _tabs);
+        var tab = new MemoTabViewModel
+        {
+            Id = $"tab-{Guid.NewGuid():N}",
+            Title = title,
+            FileName = fileName,
+            Content = string.Empty,
+            IsDirty = false
+        };
+
+        // タブを追加して空ファイルを作成します。
+        _tabs.Add(tab);
+        _storageService.SaveMemo(fileName, string.Empty);
+
+        // 状態を保存して新規タブへ移動します。
+        SaveTabsState();
+        _activeTab = tab;
+        _window.SelectTab(tab);
+        _window.SetEditorText(tab.Content);
+    }
+
+    /// <summary>
+    /// タブ改名要求を処理します。
+    /// </summary>
+    /// <param name="tab">対象タブ。</param>
+    private void HandleRenameTabRequested(MemoTabViewModel tab)
+    {
+        // 改名入力ダイアログを表示します。
+        var dialog = new TextInputDialog(tab.Title)
+        {
+            Owner = _window
+        };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        // 入力文字列をタイトルへ反映します。
+        var newTitle = string.IsNullOrWhiteSpace(dialog.ResultText) ? "memo" : dialog.ResultText.Trim();
+        var newFileName = _tabFileNameService.BuildUniqueFileName(newTitle, _tabs, tab.Id);
+
+        try
+        {
+            // ファイル名が変わる場合はファイルも改名します。
+            if (!string.Equals(tab.FileName, newFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                _storageService.RenameMemo(tab.FileName, newFileName);
+                tab.FileName = newFileName;
+            }
+
+            // タイトル変更を保存します。
+            tab.Title = newTitle;
+            SaveTabsState();
+        }
+        catch (Exception exception)
+        {
+            // 改名失敗を通知して戻します。
+            _loggingService.Error("タブ名変更に失敗しました。", exception);
+            WpfMessageBox.Show(_window, "タブ名変更に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>
+    /// タブ削除要求を処理します。
+    /// </summary>
+    /// <param name="tab">対象タブ。</param>
+    private void HandleDeleteTabRequested(MemoTabViewModel tab)
+    {
+        // 最低 1 タブ維持ルールを適用します。
+        if (_tabs.Count <= 1)
+        {
+            WpfMessageBox.Show(_window, "最後の1タブは削除できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+            return;
+        }
+
+        // 削除確認を表示します。
+        var confirmation = WpfMessageBox.Show(
+            _window,
+            $"タブ \"{tab.Title}\" を削除しますか？",
+            "TopMemo",
+            WpfMessageBoxButton.YesNo,
+            WpfMessageBoxImage.Question);
+        if (confirmation != WpfMessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        // 削除後に選ぶタブを決定します。
+        var index = _tabs.IndexOf(tab);
+        var nextIndex = Math.Max(0, index - 1);
+
+        // タブ定義と保存ファイルを削除します。
+        _tabs.Remove(tab);
+        _storageService.DeleteMemo(tab.FileName);
+
+        // 選択タブを復元して状態保存します。
+        _activeTab = _tabs[nextIndex];
+        _window.SelectTab(_activeTab);
+        _window.SetEditorText(_activeTab.Content);
+        SaveTabsState();
+    }
+
+    /// <summary>
+    /// タブ切替イベントを処理します。
+    /// </summary>
+    /// <param name="tab">新しいタブ。</param>
+    private void HandleSelectedTabChanged(MemoTabViewModel? tab)
+    {
+        // 選択が無い場合は処理しません。
+        if (tab is null)
+        {
+            return;
+        }
+
+        // 同一タブなら処理不要です。
+        if (_activeTab is not null && _activeTab.Id == tab.Id)
+        {
+            return;
+        }
+
+        // タブ切替時保存を実行します。
+        SaveDirtyTabs();
+
+        // 新しいタブへ切り替えて本文を反映します。
+        _activeTab = tab;
+        _window.SetEditorText(tab.Content);
+        SaveTabsState();
+    }
+
+    /// <summary>
+    /// エディタ本文変更イベントを処理します。
+    /// </summary>
+    /// <param name="text">本文。</param>
+    private void HandleEditorTextChanged(string text)
+    {
+        // アクティブタブがない場合は処理しません。
+        if (_activeTab is null)
+        {
+            return;
+        }
+
+        // 本文更新と dirty 化を行います。
+        _activeTab.Content = text;
+        _activeTab.IsDirty = true;
+    }
+
+    /// <summary>
+    /// リンククリック要求を処理します。
+    /// </summary>
+    /// <param name="offset">クリック位置オフセット。</param>
+    /// <returns>リンクを開けた場合は true。</returns>
+    private bool HandleLinkOpenRequested(int offset)
+    {
+        // ドキュメント未準備なら失敗します。
+        if (_window.Document is null)
+        {
+            return false;
+        }
+
+        // リンク遷移を試行します。
+        return _linkNavigationService.TryOpenLink(_window.Document, offset);
+    }
+
+    /// <summary>
+    /// 自動起動トグル要求を処理します。
+    /// </summary>
+    /// <param name="enabled">有効状態。</param>
+    private void HandleAutoStartToggled(bool enabled)
+    {
+        // 要求状態に応じて登録/解除を実行します。
+        if (enabled)
+        {
+            var success = _startupRegistrationService.Enable(
+                _settings.Startup.AllowRegistryFallback,
+                out var provider,
+                out var errorMessage);
+            if (!success)
+            {
+                _loggingService.Error($"自動起動の有効化に失敗しました。{errorMessage}");
+                WpfMessageBox.Show(_window, "自動起動の有効化に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+                _settings.Behavior.AutoStartEnabled = false;
+                _settings.Startup.LastProvider = "None";
+                _trayService.SetAutoStartState(false);
+                _storageService.SaveSettings(_settings);
+                return;
+            }
+
+            _settings.Behavior.AutoStartEnabled = true;
+            _settings.Startup.LastProvider = provider;
+        }
+        else
+        {
+            var success = _startupRegistrationService.Disable(out var errorMessage);
+            if (!success)
+            {
+                _loggingService.Error($"自動起動の無効化に失敗しました。{errorMessage}");
+                WpfMessageBox.Show(_window, "自動起動の無効化に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+                _settings.Behavior.AutoStartEnabled = true;
+                _trayService.SetAutoStartState(true);
+                _storageService.SaveSettings(_settings);
+                return;
+            }
+
+            _settings.Behavior.AutoStartEnabled = false;
+            _settings.Startup.LastProvider = "None";
+        }
+
+        // 設定を保存してトレイ状態を同期します。
+        _trayService.SetAutoStartState(_settings.Behavior.AutoStartEnabled);
+        _storageService.SaveSettings(_settings);
+    }
+
+    /// <summary>
+    /// Win+Tab 要求を処理します。
+    /// </summary>
+    private void HandleTaskViewRequest()
+    {
+        // Win+Tab を送出します。
+        var sent = _taskViewInputService.SendWinTab();
+        if (!sent)
+        {
+            _loggingService.Error("Win+Tab の送出に失敗しました。");
+        }
+    }
+
+    /// <summary>
+    /// 非表示時保存を実行してウィンドウを隠します。
+    /// </summary>
+    private void HideEditorAndSave()
+    {
+        // 表示中のみ保存と非表示を実行します。
+        if (!_window.IsEditorVisible)
+        {
+            return;
+        }
+
+        // 非表示トリガー保存を実行します。
+        SaveDirtyTabs();
+        PersistWindowPlacement();
+        SaveTabsState();
+        _storageService.SaveSettings(_settings);
+        _window.HideEditor();
+    }
+
+    /// <summary>
+    /// dirty タブを保存します。
+    /// </summary>
+    private void SaveDirtyTabs()
+    {
+        // dirty の全タブを順に保存します。
+        foreach (var tab in _tabs.Where(tab => tab.IsDirty))
+        {
+            try
+            {
+                _storageService.SaveMemo(tab.FileName, tab.Content);
+                tab.IsDirty = false;
+            }
+            catch (Exception exception)
+            {
+                _loggingService.Error($"タブ保存に失敗しました。file={tab.FileName}", exception);
+            }
+        }
+    }
+
+    /// <summary>
+    /// タブ定義を tabs.json へ保存します。
+    /// </summary>
+    private void SaveTabsState()
+    {
+        // 現在状態から保存モデルを組み立てます。
+        var tabsState = new TabsState
+        {
+            ActiveTabId = _activeTab?.Id ?? _tabs.First().Id,
+            Tabs = _tabs.Select(tab => new TabDefinition
+            {
+                Id = tab.Id,
+                Title = tab.Title,
+                FileName = tab.FileName
+            }).ToList()
+        };
+
+        // tabs.json を保存します。
+        _storageService.SaveTabs(tabsState);
+    }
+
+    /// <summary>
+    /// ウィンドウ配置を設定へ反映します。
+    /// </summary>
+    private void PersistWindowPlacement()
+    {
+        // 現在位置とサイズを設定へ書き戻します。
+        var (x, y, width, height) = _window.GetWindowPlacement();
+        _settings.EditorWindow.X = x;
+        _settings.EditorWindow.Y = y;
+        _settings.EditorWindow.Width = width;
+        _settings.EditorWindow.Height = height;
+    }
+}

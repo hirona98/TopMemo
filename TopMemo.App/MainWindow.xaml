@@ -11,59 +11,162 @@
         Width="720"
         ResizeMode="CanResize"
         ShowInTaskbar="False"
+        Background="White"
         Topmost="True"
         WindowStartupLocation="Manual">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <!-- アクセント色を定義します。 -->
+        <SolidColorBrush x:Key="AccentBrush"
+                         Color="#4873CF" />
 
-        <Grid Grid.Row="0"
-              Margin="8,8,8,6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <!-- タブ見た目を SettingWindow 風に揃えます。 -->
+        <Style x:Key="AdminTabItemStyle"
+               TargetType="TabItem">
+            <Setter Property="Background"
+                    Value="#F0F0F0" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Padding"
+                    Value="15,10" />
+            <Setter Property="Foreground"
+                    Value="#666666" />
+            <Setter Property="Margin"
+                    Value="0" />
+            <Style.Triggers>
+                <Trigger Property="IsSelected"
+                         Value="True">
+                    <Setter Property="Background"
+                            Value="White" />
+                    <Setter Property="Foreground"
+                            Value="{StaticResource AccentBrush}" />
+                    <Setter Property="BorderThickness"
+                            Value="0,0,0,3" />
+                    <Setter Property="BorderBrush"
+                            Value="{StaticResource AccentBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
+        <!-- ボタン見た目を SettingWindow 風に揃えます。 -->
+        <Style x:Key="DisabledButtonStyle"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="#4873CF" />
+            <Setter Property="Foreground"
+                    Value="WhiteSmoke" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Padding"
+                    Value="10,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Background"
+                                        Value="#CCCCCC" />
+                                <Setter Property="Foreground"
+                                        Value="#888888" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter Property="Background"
+                                        Value="#5A84D9" />
+                            </Trigger>
+                            <Trigger Property="IsPressed"
+                                     Value="True">
+                                <Setter Property="Background"
+                                        Value="#3A62B8" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True">
+        <!-- 下部の操作帯を余白なしで配置します。 -->
+        <Border DockPanel.Dock="Bottom"
+                Background="#F5F5F5"
+                Padding="0"
+                BorderBrush="#E0E0E0"
+                BorderThickness="0,1,0,0">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right"
+                           Text="タブ内編集 / 非表示時に保存"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource AccentBrush}" />
+                <TextBlock Text="右クリック: 名前変更 / 削除"
+                           VerticalAlignment="Center"
+                           Foreground="#666666" />
+            </DockPanel>
+        </Border>
+
+        <!-- メイン領域を余白なしで配置します。 -->
+        <Grid Margin="0">
+            <!-- 各タブの中にエディタを配置します。 -->
             <TabControl Name="MemoTabControl"
-                        Grid.Column="0"
-                        BorderThickness="1"
+                        BorderThickness="0"
                         Background="White"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
                         SelectionChanged="MemoTabControl_SelectionChanged"
                         PreviewMouseWheel="MemoTabControl_PreviewMouseWheel"
-                        Margin="0,0,8,0">
+                        Margin="0">
                 <TabControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type viewModels:MemoTabViewModel}">
                         <TextBlock Text="{Binding Title}" />
                     </DataTemplate>
                 </TabControl.ItemTemplate>
                 <TabControl.ItemContainerStyle>
-                    <Style TargetType="TabItem">
+                    <Style TargetType="TabItem"
+                           BasedOn="{StaticResource AdminTabItemStyle}">
                         <EventSetter Event="PreviewMouseRightButtonDown"
                                      Handler="TabItem_PreviewMouseRightButtonDown" />
                     </Style>
                 </TabControl.ItemContainerStyle>
+                <TabControl.ContentTemplate>
+                    <DataTemplate DataType="{x:Type viewModels:MemoTabViewModel}">
+                        <Border BorderBrush="#CCCCCC"
+                                BorderThickness="1"
+                                Background="White"
+                                Margin="0">
+                            <avalonEdit:TextEditor x:Name="TabMemoEditor"
+                                                   Tag="{Binding}"
+                                                   ShowLineNumbers="False"
+                                                   Margin="0"
+                                                   Padding="5"
+                                                   Background="White"
+                                                   Foreground="#1F2A44"
+                                                   HorizontalScrollBarVisibility="Auto"
+                                                   VerticalScrollBarVisibility="Auto"
+                                                   Loaded="MemoEditor_Loaded"
+                                                   Unloaded="MemoEditor_Unloaded"
+                                                   PreviewMouseLeftButtonUp="MemoEditor_PreviewMouseLeftButtonUp" />
+                        </Border>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
             </TabControl>
 
-            <Button Grid.Column="1"
-                    Content="+"
-                    Width="30"
+            <!-- 新規タブ追加ボタンを入力エリア上部へ重ねて配置します。 -->
+            <Button Content="+"
+                    Width="34"
                     Height="30"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0"
+                    Panel.ZIndex="10"
+                    Style="{StaticResource DisabledButtonStyle}"
                     Click="AddTabButton_Click" />
         </Grid>
-
-        <Border Grid.Row="1"
-                Margin="8,0,8,8"
-                BorderBrush="#D0D0D0"
-                BorderThickness="1">
-            <avalonEdit:TextEditor Name="MemoEditor"
-                                   FontFamily="Consolas"
-                                   FontSize="14"
-                                   ShowLineNumbers="False"
-                                   HorizontalScrollBarVisibility="Auto"
-                                   VerticalScrollBarVisibility="Auto"
-                                   PreviewMouseLeftButtonUp="MemoEditor_PreviewMouseLeftButtonUp" />
-        </Border>
-    </Grid>
+    </DockPanel>
 </Window>

@@ -3,6 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
+using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
 using TopMemo.App.Infrastructure;
 using TopMemo.App.ViewModels;
@@ -30,9 +33,6 @@ public partial class MainWindow : Window
 
         // タブ右クリックメニューを構築します。
         BuildTabContextMenu();
-
-        // エディタ変更イベントを購読します。
-        MemoEditor.TextChanged += MemoEditor_TextChanged;
 
         // 閉じる操作を非表示へ変換するため Closing を購読します。
         Closing += MainWindow_Closing;
@@ -62,7 +62,12 @@ public partial class MainWindow : Window
     /// <summary>
     /// エディタ本文変更イベントです。
     /// </summary>
-    public event Action<string>? EditorTextChanged;
+    public event Action<MemoTabViewModel, string>? EditorTextChanged;
+
+    /// <summary>
+    /// エディタ初期化イベントです。
+    /// </summary>
+    public event Action<TextEditor>? EditorLoaded;
 
     /// <summary>
     /// 閉じる操作時の非表示要求イベントです。
@@ -72,12 +77,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// リンククリック要求イベントです。
     /// </summary>
-    public event Func<int, bool>? LinkOpenRequested;
-
-    /// <summary>
-    /// エディタドキュメントを取得します。
-    /// </summary>
-    public TextDocument Document => MemoEditor.Document;
+    public event Func<TextDocument, int, bool>? LinkOpenRequested;
 
     /// <summary>
     /// 現在選択中のタブを取得します。
@@ -88,11 +88,6 @@ public partial class MainWindow : Window
     /// エディタ表示中かを返します。
     /// </summary>
     public bool IsEditorVisible => IsVisible;
-
-    /// <summary>
-    /// AvalonEdit 本体を取得します。
-    /// </summary>
-    public ICSharpCode.AvalonEdit.TextEditor Editor => MemoEditor;
 
     /// <summary>
     /// タブ一覧をバインドします。
@@ -114,18 +109,6 @@ public partial class MainWindow : Window
         _suppressTabSelectionChanged = true;
         MemoTabControl.SelectedItem = tab;
         _suppressTabSelectionChanged = false;
-    }
-
-    /// <summary>
-    /// エディタ本文をイベント抑止付きで設定します。
-    /// </summary>
-    /// <param name="text">本文。</param>
-    public void SetEditorText(string text)
-    {
-        // 反映中は TextChanged 通知を抑止します。
-        _suppressEditorTextChanged = true;
-        MemoEditor.Text = text;
-        _suppressEditorTextChanged = false;
     }
 
     /// <summary>
@@ -151,7 +134,17 @@ public partial class MainWindow : Window
             Show();
         }
         Activate();
-        MemoEditor.Focus();
+
+        // 現在タブ内のエディタへフォーカスします。
+        var selectedEditor = TryGetSelectedEditor();
+        if (selectedEditor is not null)
+        {
+            selectedEditor.Focus();
+            return;
+        }
+
+        // エディタ未生成時はタブへフォーカスします。
+        MemoTabControl.Focus();
     }
 
     /// <summary>
@@ -217,23 +210,6 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// エディタ本文変更イベント処理です。
-    /// </summary>
-    /// <param name="sender">送信元。</param>
-    /// <param name="eventArgs">イベント引数。</param>
-    private void MemoEditor_TextChanged(object? sender, EventArgs eventArgs)
-    {
-        // 内部反映中は通知しません。
-        if (_suppressEditorTextChanged)
-        {
-            return;
-        }
-
-        // 外部へ本文変更を通知します。
-        EditorTextChanged?.Invoke(MemoEditor.Text);
-    }
-
-    /// <summary>
     /// 追加ボタンクリック処理です。
     /// </summary>
     /// <param name="sender">送信元。</param>
@@ -256,6 +232,9 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // 選択タブの本文をエディタへ反映します。
+        SyncSelectedTabEditorText();
 
         // 新しい選択タブを通知します。
         SelectedTabChanged?.Invoke(SelectedTab);
@@ -340,32 +319,205 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// タブ内エディタロード時の処理です。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_Loaded(object sender, RoutedEventArgs eventArgs)
+    {
+        // 対象がテキストエディタでない場合は処理しません。
+        if (sender is not TextEditor editor)
+        {
+            return;
+        }
+
+        // タブ情報が無い場合は処理しません。
+        if (editor.Tag is not MemoTabViewModel tab)
+        {
+            return;
+        }
+
+        // 多重購読を避けるため再購読します。
+        editor.TextChanged -= MemoEditor_TextChanged;
+        editor.TextChanged += MemoEditor_TextChanged;
+
+        // タブ本文を初期反映します。
+        SetEditorText(editor, tab.Content);
+
+        // 初期化済みエディタを外部へ通知します。
+        EditorLoaded?.Invoke(editor);
+    }
+
+    /// <summary>
+    /// タブ内エディタアンロード時の処理です。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_Unloaded(object sender, RoutedEventArgs eventArgs)
+    {
+        // 対象がテキストエディタの場合のみ購読を解除します。
+        if (sender is TextEditor editor)
+        {
+            editor.TextChanged -= MemoEditor_TextChanged;
+        }
+    }
+
+    /// <summary>
+    /// タブ内エディタ本文変更イベント処理です。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_TextChanged(object? sender, EventArgs eventArgs)
+    {
+        // 対象がテキストエディタでない場合は処理しません。
+        if (sender is not TextEditor editor)
+        {
+            return;
+        }
+
+        // 対象タブを解決できない場合は通知できません。
+        if (editor.Tag is not MemoTabViewModel tab)
+        {
+            return;
+        }
+
+        // 内部反映中は通知しません。
+        if (_suppressEditorTextChanged)
+        {
+            return;
+        }
+
+        // 対象タブと本文を外部へ通知します。
+        EditorTextChanged?.Invoke(tab, editor.Text);
+    }
+
+    /// <summary>
     /// エディタのマウス左ボタンクリック処理です。
     /// </summary>
     /// <param name="sender">送信元。</param>
     /// <param name="eventArgs">イベント引数。</param>
     private void MemoEditor_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs eventArgs)
     {
+        // 対象がテキストエディタでない場合は処理しません。
+        if (sender is not TextEditor editor)
+        {
+            return;
+        }
+
         // ドキュメント未初期化時は処理しません。
-        if (MemoEditor.Document is null)
+        if (editor.Document is null)
         {
             return;
         }
 
         // クリック位置からドキュメントオフセットを計算します。
-        var position = MemoEditor.GetPositionFromPoint(eventArgs.GetPosition(MemoEditor));
+        var position = editor.GetPositionFromPoint(eventArgs.GetPosition(editor));
         if (position is null)
         {
             return;
         }
 
         // クリック位置のリンク遷移を要求します。
-        var offset = MemoEditor.Document.GetOffset(position.Value.Location);
-        var opened = LinkOpenRequested?.Invoke(offset) ?? false;
+        var offset = editor.Document.GetOffset(position.Value.Location);
+        var opened = LinkOpenRequested?.Invoke(editor.Document, offset) ?? false;
         if (opened)
         {
             eventArgs.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// 現在選択中タブのエディタを取得します。
+    /// </summary>
+    /// <returns>エディタ。未生成時は null。</returns>
+    private TextEditor? TryGetSelectedEditor()
+    {
+        // 選択タブが無い場合は取得できません。
+        if (SelectedTab is null)
+        {
+            return null;
+        }
+
+        // 可視ツリーから選択タブに紐づくエディタを検索します。
+        return FindEditorByTab(MemoTabControl, SelectedTab);
+    }
+
+    /// <summary>
+    /// 選択タブ本文をエディタへ同期します。
+    /// </summary>
+    private void SyncSelectedTabEditorText()
+    {
+        // まず現在の可視ツリーで同期を試行します。
+        var immediateEditor = TryGetSelectedEditor();
+        if (immediateEditor is not null && immediateEditor.Tag is MemoTabViewModel immediateTab)
+        {
+            SetEditorText(immediateEditor, immediateTab.Content);
+            return;
+        }
+
+        // 未生成時はレイアウト確定後に再試行します。
+        Dispatcher.BeginInvoke(() =>
+        {
+            var delayedEditor = TryGetSelectedEditor();
+            if (delayedEditor is null || delayedEditor.Tag is not MemoTabViewModel delayedTab)
+            {
+                return;
+            }
+
+            SetEditorText(delayedEditor, delayedTab.Content);
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// エディタ本文を通知抑止付きで設定します。
+    /// </summary>
+    /// <param name="editor">対象エディタ。</param>
+    /// <param name="text">設定本文。</param>
+    private void SetEditorText(TextEditor editor, string text)
+    {
+        // 同じ本文なら更新しません。
+        if (editor.Text == text)
+        {
+            return;
+        }
+
+        // 外部通知を抑止して本文を反映します。
+        _suppressEditorTextChanged = true;
+        editor.Text = text;
+        _suppressEditorTextChanged = false;
+    }
+
+    /// <summary>
+    /// 指定タブに紐づくエディタを可視ツリーから探索します。
+    /// </summary>
+    /// <param name="root">探索開始ノード。</param>
+    /// <param name="tab">対象タブ。</param>
+    /// <returns>一致するエディタ。見つからない場合は null。</returns>
+    private static TextEditor? FindEditorByTab(DependencyObject root, MemoTabViewModel tab)
+    {
+        // 子要素を順に探索します。
+        var childCount = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < childCount; index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+
+            // タブに紐づくエディタを検出したら返します。
+            if (child is TextEditor editor &&
+                editor.Tag is MemoTabViewModel ownerTab &&
+                ownerTab.Id == tab.Id)
+            {
+                return editor;
+            }
+
+            // 子孫ノードを再帰探索します。
+            var nested = FindEditorByTab(child, tab);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

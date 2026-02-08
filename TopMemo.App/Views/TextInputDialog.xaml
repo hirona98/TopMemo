@@ -4,8 +4,60 @@
         Title="ファイル名変更"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
+        Background="#F4F6FB"
         Height="150"
         Width="360">
+    <Window.Resources>
+        <!-- 設定画面風のボタンスタイルを定義します。 -->
+        <Style x:Key="DialogActionButtonStyle"
+               TargetType="Button">
+            <Setter Property="Background"
+                    Value="#4873CF" />
+            <Setter Property="Foreground"
+                    Value="WhiteSmoke" />
+            <Setter Property="BorderThickness"
+                    Value="0" />
+            <Setter Property="Padding"
+                    Value="10,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#CCCCCC" />
+                                <Setter Property="Foreground"
+                                        Value="#888888" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#5A84D9" />
+                            </Trigger>
+                            <Trigger Property="IsPressed"
+                                     Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="#3A62B8" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -17,10 +69,16 @@
                    Text="新しいファイル名"
                    Margin="0,0,0,6" />
 
-        <TextBox Grid.Row="1"
-                 Name="NameTextBox"
-                 MinWidth="320"
-                 Margin="0,0,0,12" />
+        <Border Grid.Row="1"
+                BorderBrush="#E0E0E0"
+                BorderThickness="1"
+                Background="White"
+                Margin="0,0,0,12">
+            <TextBox Name="NameTextBox"
+                     MinWidth="320"
+                     BorderThickness="0"
+                     Padding="6,4" />
+        </Border>
 
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
@@ -29,10 +87,12 @@
                     Content="OK"
                     MinWidth="72"
                     Margin="0,0,8,0"
+                    Style="{StaticResource DialogActionButtonStyle}"
                     IsDefault="True"
                     Click="OkButton_Click" />
             <Button Content="キャンセル"
                     MinWidth="72"
+                    Style="{StaticResource DialogActionButtonStyle}"
                     IsCancel="True" />
         </StackPanel>
     </Grid>

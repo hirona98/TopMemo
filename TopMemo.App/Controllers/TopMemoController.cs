@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
+using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Document;
 using TopMemo.App.Models;
 using TopMemo.App.Services;
 using TopMemo.App.ViewModels;
@@ -76,7 +78,6 @@ public sealed class TopMemoController : IDisposable
 
         // エディタ表示設定を反映します。
         _window.BindTabs(_tabs);
-        _markdownHighlightService.Apply(_window.Editor);
         _window.HideEditor();
         SelectInitialTab();
 
@@ -103,11 +104,10 @@ public sealed class TopMemoController : IDisposable
             return;
         }
 
-        // 表示前に選択タブ本文をエディタへ反映します。
+        // 表示前に選択タブを復元します。
         if (_activeTab is not null)
         {
             _window.SelectTab(_activeTab);
-            _window.SetEditorText(_activeTab.Content);
         }
 
         // 設定座標でエディタを表示します。
@@ -196,14 +196,13 @@ public sealed class TopMemoController : IDisposable
     /// </summary>
     private void SelectInitialTab()
     {
-        // 起動時タブを選択し本文を表示します。
+        // 起動時タブを選択します。
         if (_activeTab is null)
         {
             return;
         }
 
         _window.SelectTab(_activeTab);
-        _window.SetEditorText(_activeTab.Content);
     }
 
     /// <summary>
@@ -218,6 +217,7 @@ public sealed class TopMemoController : IDisposable
 
         // 編集と表示制御イベントを接続します。
         _window.SelectedTabChanged += HandleSelectedTabChanged;
+        _window.EditorLoaded += HandleEditorLoaded;
         _window.EditorTextChanged += HandleEditorTextChanged;
         _window.HideRequested += HideEditorAndSave;
         _window.LinkOpenRequested += HandleLinkOpenRequested;
@@ -306,7 +306,6 @@ public sealed class TopMemoController : IDisposable
         SaveTabsState();
         _activeTab = tab;
         _window.SelectTab(tab);
-        _window.SetEditorText(tab.Content);
     }
 
     /// <summary>
@@ -392,7 +391,6 @@ public sealed class TopMemoController : IDisposable
         // 選択タブを復元して状態保存します。
         _activeTab = _tabs[nextIndex];
         _window.SelectTab(_activeTab);
-        _window.SetEditorText(_activeTab.Content);
         SaveTabsState();
     }
 
@@ -417,44 +415,46 @@ public sealed class TopMemoController : IDisposable
         // タブ切替時保存を実行します。
         SaveDirtyTabs();
 
-        // 新しいタブへ切り替えて本文を反映します。
+        // 新しいタブへ切り替えて状態を保存します。
         _activeTab = tab;
-        _window.SetEditorText(tab.Content);
         SaveTabsState();
     }
 
     /// <summary>
     /// エディタ本文変更イベントを処理します。
     /// </summary>
+    /// <param name="tab">編集対象タブ。</param>
     /// <param name="text">本文。</param>
-    private void HandleEditorTextChanged(string text)
+    private void HandleEditorTextChanged(MemoTabViewModel tab, string text)
     {
-        // アクティブタブがない場合は処理しません。
-        if (_activeTab is null)
-        {
-            return;
-        }
+        // 編集されたタブを現在タブとして扱います。
+        _activeTab = tab;
 
         // 本文更新と dirty 化を行います。
-        _activeTab.Content = text;
-        _activeTab.IsDirty = true;
+        tab.Content = text;
+        tab.IsDirty = true;
+    }
+
+    /// <summary>
+    /// エディタ初期化イベントを処理します。
+    /// </summary>
+    /// <param name="textEditor">初期化済みエディタ。</param>
+    private void HandleEditorLoaded(TextEditor textEditor)
+    {
+        // Markdown 色付けを適用します。
+        _markdownHighlightService.Apply(textEditor);
     }
 
     /// <summary>
     /// リンククリック要求を処理します。
     /// </summary>
+    /// <param name="document">クリック元ドキュメント。</param>
     /// <param name="offset">クリック位置オフセット。</param>
     /// <returns>リンクを開けた場合は true。</returns>
-    private bool HandleLinkOpenRequested(int offset)
+    private bool HandleLinkOpenRequested(TextDocument document, int offset)
     {
-        // ドキュメント未準備なら失敗します。
-        if (_window.Document is null)
-        {
-            return false;
-        }
-
         // リンク遷移を試行します。
-        return _linkNavigationService.TryOpenLink(_window.Document, offset);
+        return _linkNavigationService.TryOpenLink(document, offset);
     }
 
     /// <summary>

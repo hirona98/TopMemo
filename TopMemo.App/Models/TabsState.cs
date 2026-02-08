@@ -30,7 +30,7 @@ public sealed class TabsState
                 new TabDefinition
                 {
                     Id = "tab-1",
-                    Title = "memo",
+                    Title = "memo.md",
                     FileName = "memo.md"
                 }
             ]
@@ -58,4 +58,3 @@ public sealed class TabDefinition
     /// </summary>
     public string FileName { get; set; } = string.Empty;
 }
-

@@ -11,6 +11,7 @@ namespace TopMemo.App.Services;
 /// </summary>
 internal sealed class HotZoneMonitorService : IDisposable
 {
+    private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(500);
     private readonly DispatcherTimer _timer;
     private readonly Func<bool> _isEditorVisible;
     private readonly Func<NativeRect?> _getEditorRect;
@@ -18,6 +19,8 @@ internal sealed class HotZoneMonitorService : IDisposable
     private bool _wasInShowZone;
     private bool _wasInTaskViewZone;
     private bool _hasEnteredEditorSinceShown;
+    private bool _hasRaisedEditorExited;
+    private DateTime? _outsideEditorSinceUtc;
     private DateTime _taskViewReadyAtUtc = DateTime.MinValue;
 
     /// <summary>
@@ -120,15 +123,27 @@ internal sealed class HotZoneMonitorService : IDisposable
             var rect = _getEditorRect();
             if (rect is not null)
             {
+                // エディタ内外の状態を判定します。
                 var isInsideEditor = rect.Value.Contains(point);
                 if (isInsideEditor)
                 {
+                    // 一度でもエディタ内へ入った状態を記録します。
                     _hasEnteredEditorSinceShown = true;
+                    _outsideEditorSinceUtc = null;
+                    _hasRaisedEditorExited = false;
                 }
-                else if (_hasEnteredEditorSinceShown)
+                else if (_hasEnteredEditorSinceShown && !_hasRaisedEditorExited)
                 {
-                    EditorExited?.Invoke();
-                    _hasEnteredEditorSinceShown = false;
+                    // エディタ外へ出た時刻を初回のみ記録します。
+                    _outsideEditorSinceUtc ??= DateTime.UtcNow;
+
+                    // 0.5秒継続して外にいる場合のみ非表示イベントを発火します。
+                    var elapsed = DateTime.UtcNow - _outsideEditorSinceUtc.Value;
+                    if (elapsed >= HideDelay)
+                    {
+                        EditorExited?.Invoke();
+                        _hasRaisedEditorExited = true;
+                    }
                 }
             }
         }
@@ -136,6 +151,8 @@ internal sealed class HotZoneMonitorService : IDisposable
         {
             // 非表示中は状態を初期化します。
             _hasEnteredEditorSinceShown = false;
+            _hasRaisedEditorExited = false;
+            _outsideEditorSinceUtc = null;
         }
 
         // 次回比較用状態を更新します。

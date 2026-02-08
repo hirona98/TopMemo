@@ -175,12 +175,14 @@ public sealed class TopMemoController : IDisposable
         _tabs.Clear();
         foreach (var definition in tabsState.Tabs)
         {
+            // 表示名は常に保存ファイル名へ統一します。
+            var normalizedFileName = TabFileNameService.NormalizeFileName(definition.FileName);
             _tabs.Add(new MemoTabViewModel
             {
                 Id = definition.Id,
-                Title = definition.Title,
-                FileName = definition.FileName,
-                Content = _storageService.LoadMemo(definition.FileName),
+                Title = normalizedFileName,
+                FileName = normalizedFileName,
+                Content = _storageService.LoadMemo(normalizedFileName),
                 IsDirty = false
             });
         }
@@ -285,13 +287,12 @@ public sealed class TopMemoController : IDisposable
         // タブ切替前に未保存内容を保存します。
         SaveDirtyTabs();
 
-        // 既定タイトルからユニークなファイル名を生成します。
-        var title = "memo";
-        var fileName = _tabFileNameService.BuildUniqueFileName(title, _tabs);
+        // 既定名からユニークなファイル名を生成します。
+        var fileName = _tabFileNameService.BuildUniqueFileName("memo.md", _tabs);
         var tab = new MemoTabViewModel
         {
             Id = $"tab-{Guid.NewGuid():N}",
-            Title = title,
+            Title = fileName,
             FileName = fileName,
             Content = string.Empty,
             IsDirty = false
@@ -315,7 +316,7 @@ public sealed class TopMemoController : IDisposable
     private void HandleRenameTabRequested(MemoTabViewModel tab)
     {
         // 改名入力ダイアログを表示します。
-        var dialog = new TextInputDialog(tab.Title)
+        var dialog = new TextInputDialog(tab.FileName)
         {
             Owner = _window
         };
@@ -324,9 +325,15 @@ public sealed class TopMemoController : IDisposable
             return;
         }
 
-        // 入力文字列をタイトルへ反映します。
-        var newTitle = string.IsNullOrWhiteSpace(dialog.ResultText) ? "memo" : dialog.ResultText.Trim();
-        var newFileName = _tabFileNameService.BuildUniqueFileName(newTitle, _tabs, tab.Id);
+        // 入力文字列を .md ファイル名へ正規化します。
+        var newFileName = TabFileNameService.NormalizeFileName(dialog.ResultText);
+
+        // 同名のタブ名は許可しません。
+        if (TabFileNameService.IsDuplicatedFileName(newFileName, _tabs, tab.Id))
+        {
+            WpfMessageBox.Show(_window, "同じファイル名のタブは作成できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Warning);
+            return;
+        }
 
         try
         {
@@ -337,8 +344,8 @@ public sealed class TopMemoController : IDisposable
                 tab.FileName = newFileName;
             }
 
-            // タイトル変更を保存します。
-            tab.Title = newTitle;
+            // タブ表示名をファイル名へ同期します。
+            tab.Title = newFileName;
             SaveTabsState();
         }
         catch (Exception exception)
@@ -563,7 +570,7 @@ public sealed class TopMemoController : IDisposable
             Tabs = _tabs.Select(tab => new TabDefinition
             {
                 Id = tab.Id,
-                Title = tab.Title,
+                Title = tab.FileName,
                 FileName = tab.FileName
             }).ToList()
         };

@@ -33,6 +33,11 @@ internal static class NativeMethods
     internal const ushort VkLwin = 0x5B;
 
     /// <summary>
+    /// 左マウスボタンの仮想キーコードです。
+    /// </summary>
+    internal const int VkLbutton = 0x01;
+
+    /// <summary>
     /// Tab キーの仮想キーコードです。
     /// </summary>
     internal const ushort VkTab = 0x09;
@@ -44,6 +49,14 @@ internal static class NativeMethods
     /// <returns>取得に成功した場合は true。</returns>
     [DllImport("user32.dll")]
     internal static extern bool GetCursorPos(out Point point);
+
+    /// <summary>
+    /// 指定キーの押下状態を取得します。
+    /// </summary>
+    /// <param name="vKey">仮想キーコード。</param>
+    /// <returns>押下状態値。</returns>
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int vKey);
 
     /// <summary>
     /// ウィンドウ矩形を取得します。

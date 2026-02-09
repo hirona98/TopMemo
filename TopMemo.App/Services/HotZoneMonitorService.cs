@@ -123,26 +123,35 @@ internal sealed class HotZoneMonitorService : IDisposable
             var rect = _getEditorRect();
             if (rect is not null)
             {
-                // エディタ内外の状態を判定します。
-                var isInsideEditor = rect.Value.Contains(point);
-                if (isInsideEditor)
+                // マウス操作中は誤非表示防止のため退出判定を停止します。
+                if (IsLeftMouseButtonPressed())
                 {
-                    // 一度でもエディタ内へ入った状態を記録します。
-                    _hasEnteredEditorSinceShown = true;
                     _outsideEditorSinceUtc = null;
                     _hasRaisedEditorExited = false;
                 }
-                else if (_hasEnteredEditorSinceShown && !_hasRaisedEditorExited)
+                else
                 {
-                    // エディタ外へ出た時刻を初回のみ記録します。
-                    _outsideEditorSinceUtc ??= DateTime.UtcNow;
-
-                    // 0.5秒継続して外にいる場合のみ非表示イベントを発火します。
-                    var elapsed = DateTime.UtcNow - _outsideEditorSinceUtc.Value;
-                    if (elapsed >= HideDelay)
+                    // エディタ内外の状態を判定します。
+                    var isInsideEditor = rect.Value.Contains(point);
+                    if (isInsideEditor)
                     {
-                        EditorExited?.Invoke();
-                        _hasRaisedEditorExited = true;
+                        // 一度でもエディタ内へ入った状態を記録します。
+                        _hasEnteredEditorSinceShown = true;
+                        _outsideEditorSinceUtc = null;
+                        _hasRaisedEditorExited = false;
+                    }
+                    else if (_hasEnteredEditorSinceShown && !_hasRaisedEditorExited)
+                    {
+                        // エディタ外へ出た時刻を初回のみ記録します。
+                        _outsideEditorSinceUtc ??= DateTime.UtcNow;
+
+                        // 0.5秒継続して外にいる場合のみ非表示イベントを発火します。
+                        var elapsed = DateTime.UtcNow - _outsideEditorSinceUtc.Value;
+                        if (elapsed >= HideDelay)
+                        {
+                            EditorExited?.Invoke();
+                            _hasRaisedEditorExited = true;
+                        }
                     }
                 }
             }
@@ -158,6 +167,16 @@ internal sealed class HotZoneMonitorService : IDisposable
         // 次回比較用状態を更新します。
         _wasInTaskViewZone = inTaskViewZone;
         _wasInShowZone = inShowZone;
+    }
+
+    /// <summary>
+    /// 左マウスボタンが押下中かを判定します。
+    /// </summary>
+    /// <returns>押下中なら true。</returns>
+    private static bool IsLeftMouseButtonPressed()
+    {
+        // GetAsyncKeyState の最上位ビットで押下状態を判定します。
+        return (NativeMethods.GetAsyncKeyState(NativeMethods.VkLbutton) & 0x8000) != 0;
     }
 
     /// <summary>

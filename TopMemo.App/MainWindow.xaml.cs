@@ -70,6 +70,11 @@ public partial class MainWindow : Window
     public event Action<MemoTabViewModel>? DeleteFileRequested;
 
     /// <summary>
+    /// 全タブ削除要求イベントです。
+    /// </summary>
+    public event Action? CloseAllTabsRequested;
+
+    /// <summary>
     /// タブ切替イベントです。
     /// </summary>
     public event Action<MemoTabViewModel?>? SelectedTabChanged;
@@ -307,9 +312,15 @@ public partial class MainWindow : Window
         var openFileItem = new MenuItem { Header = "ファイルを開く" };
         openFileItem.Click += (_, _) => OpenFileDialogRequested?.Invoke();
 
+        // 「すべてのタブを閉じる」メニューを作成します。
+        var closeAllTabsItem = new MenuItem { Header = "すべてのタブを閉じる" };
+        closeAllTabsItem.Click += (_, _) => CloseAllTabsRequested?.Invoke();
+
         // メニューへ項目を追加します。
         _tabRowContextMenu.Items.Add(createFileItem);
         _tabRowContextMenu.Items.Add(openFileItem);
+        _tabRowContextMenu.Items.Add(new Separator());
+        _tabRowContextMenu.Items.Add(closeAllTabsItem);
     }
 
     /// <summary>
@@ -331,8 +342,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        // タブ行以外ではメニューを表示しません。
-        if (FindAncestor<TabPanel>(source) is null)
+        // タブがある場合はタブ行上でのみメニューを表示します。
+        var isEmptyState = MemoTabControl.Items.Count == 0;
+        if (!isEmptyState && FindAncestor<TabPanel>(source) is null)
         {
             return;
         }

@@ -191,7 +191,13 @@ public sealed class TopMemoController : IDisposable
             });
         }
 
-        // アクティブタブを復元します。
+        // タブ件数に応じてアクティブタブを復元します。
+        if (_tabs.Count == 0)
+        {
+            _activeTab = null;
+            return;
+        }
+
         _activeTab = _tabs.FirstOrDefault(tab => tab.Id == tabsState.ActiveTabId) ?? _tabs.First();
     }
 
@@ -219,6 +225,7 @@ public sealed class TopMemoController : IDisposable
         _window.RenameTabRequested += HandleRenameTabRequested;
         _window.DeleteTabRequested += HandleDeleteTabRequested;
         _window.DeleteFileRequested += HandleDeleteFileRequested;
+        _window.CloseAllTabsRequested += HandleCloseAllTabsRequested;
         _window.TabOrderChanged += HandleTabOrderChanged;
 
         // 編集と表示制御イベントを接続します。
@@ -420,12 +427,6 @@ public sealed class TopMemoController : IDisposable
     /// <param name="tab">対象タブ。</param>
     private void HandleDeleteTabRequested(MemoTabViewModel tab)
     {
-        // 最低 1 タブ維持ルールを適用します。
-        if (!CanDeleteTab())
-        {
-            return;
-        }
-
         // 変更を退避してタブのみ削除します。
         SaveDirtyTabs();
         RemoveTab(tab);
@@ -437,12 +438,6 @@ public sealed class TopMemoController : IDisposable
     /// <param name="tab">対象タブ。</param>
     private void HandleDeleteFileRequested(MemoTabViewModel tab)
     {
-        // 最低 1 タブ維持ルールを適用します。
-        if (!CanDeleteTab())
-        {
-            return;
-        }
-
         // ファイル削除確認を表示します。
         var confirmation = ShowMessageDialog(
             $"ファイル \"{tab.FileName}\" を削除しますか？\nこの操作は元に戻せません。",
@@ -468,14 +463,41 @@ public sealed class TopMemoController : IDisposable
     }
 
     /// <summary>
+    /// 全タブ削除要求を処理します。
+    /// </summary>
+    private void HandleCloseAllTabsRequested()
+    {
+        // タブが無い場合は処理不要です。
+        if (_tabs.Count == 0)
+        {
+            return;
+        }
+
+        // 変更を保存して全タブを閉じます。
+        SaveDirtyTabs();
+        _tabs.Clear();
+        _activeTab = null;
+        UpdateCurrentMemoPath();
+        SaveTabsState();
+    }
+
+    /// <summary>
     /// タブ切替イベントを処理します。
     /// </summary>
     /// <param name="tab">新しいタブ。</param>
     private void HandleSelectedTabChanged(MemoTabViewModel? tab)
     {
-        // 選択が無い場合は処理しません。
+        // 選択が無い場合はアクティブ解除を保存します。
         if (tab is null)
         {
+            if (_activeTab is null)
+            {
+                return;
+            }
+
+            _activeTab = null;
+            UpdateCurrentMemoPath();
+            SaveTabsState();
             return;
         }
 
@@ -754,7 +776,7 @@ public sealed class TopMemoController : IDisposable
         // 現在状態から保存モデルを組み立てます。
         var tabsState = new TabsState
         {
-            ActiveTabId = _activeTab?.Id ?? _tabs.First().Id,
+            ActiveTabId = _activeTab?.Id ?? (_tabs.Count > 0 ? _tabs[0].Id : string.Empty),
             Tabs = _tabs.Select(tab => new TabDefinition
             {
                 Id = tab.Id,
@@ -814,22 +836,6 @@ public sealed class TopMemoController : IDisposable
     }
 
     /// <summary>
-    /// タブ削除可能かを判定します。
-    /// </summary>
-    /// <returns>削除可能なら true。</returns>
-    private bool CanDeleteTab()
-    {
-        // 最低 1 タブ維持ルールを適用します。
-        if (_tabs.Count > 1)
-        {
-            return true;
-        }
-
-        ShowMessageDialog("最後の1タブは削除できません。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
-        return false;
-    }
-
-    /// <summary>
     /// タブのみを削除して選択状態を整えます。
     /// </summary>
     /// <param name="tab">削除対象タブ。</param>
@@ -851,9 +857,16 @@ public sealed class TopMemoController : IDisposable
         // アクティブ削除時は近傍タブを選択します。
         if (deletingActive)
         {
-            var nextIndex = Math.Min(index, _tabs.Count - 1);
-            _activeTab = _tabs[nextIndex];
-            _window.SelectTab(_activeTab);
+            if (_tabs.Count == 0)
+            {
+                _activeTab = null;
+            }
+            else
+            {
+                var nextIndex = Math.Min(index, _tabs.Count - 1);
+                _activeTab = _tabs[nextIndex];
+                _window.SelectTab(_activeTab);
+            }
         }
 
         // 表示更新と永続化を実行します。

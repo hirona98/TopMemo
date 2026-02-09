@@ -91,7 +91,6 @@ public sealed class JsonStorageService
         {
             var defaults = TabsState.CreateDefault();
             SaveTabs(defaults);
-            EnsureMemoFileExists(defaults.Tabs[0].FileName);
             return defaults;
         }
 
@@ -119,7 +118,6 @@ public sealed class JsonStorageService
             _loggingService.Error("tabs.json の読み込みに失敗したため既定値で再生成します。", exception);
             var defaults = TabsState.CreateDefault();
             SaveTabs(defaults);
-            EnsureMemoFileExists(defaults.Tabs[0].FileName);
             return defaults;
         }
     }
@@ -297,13 +295,19 @@ public sealed class JsonStorageService
     /// <returns>有効なら true。</returns>
     private static bool IsValid(TabsState? tabsState)
     {
-        // null と空タブを確認します。
-        if (tabsState is null || tabsState.Tabs is null || tabsState.Tabs.Count == 0)
+        // null と必須コレクションを確認します。
+        if (tabsState is null || tabsState.Tabs is null)
         {
             return false;
         }
 
-        // アクティブ ID が存在するかを確認します。
+        // タブなし状態ではアクティブ ID は空のみ許可します。
+        if (tabsState.Tabs.Count == 0)
+        {
+            return string.IsNullOrWhiteSpace(tabsState.ActiveTabId);
+        }
+
+        // タブあり状態ではアクティブ ID が必要です。
         if (string.IsNullOrWhiteSpace(tabsState.ActiveTabId))
         {
             return false;

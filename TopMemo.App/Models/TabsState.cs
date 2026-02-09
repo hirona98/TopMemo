@@ -8,7 +8,7 @@ public sealed class TabsState
     /// <summary>
     /// アクティブタブ ID を取得または設定します。
     /// </summary>
-    public string ActiveTabId { get; set; } = "tab-1";
+    public string ActiveTabId { get; set; } = string.Empty;
 
     /// <summary>
     /// タブ定義一覧を取得または設定します。
@@ -21,19 +21,11 @@ public sealed class TabsState
     /// <returns>既定の <see cref="TabsState"/>。</returns>
     public static TabsState CreateDefault()
     {
-        // 既定の 1 タブ構成を返します。
+        // 既定のタブなし構成を返します。
         return new TabsState
         {
-            ActiveTabId = "tab-1",
-            Tabs =
-            [
-                new TabDefinition
-                {
-                    Id = "tab-1",
-                    Title = "memo.md",
-                    FileName = "memo.md"
-                }
-            ]
+            ActiveTabId = string.Empty,
+            Tabs = []
         };
     }
 }

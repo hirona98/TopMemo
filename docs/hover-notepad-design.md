@@ -3,7 +3,7 @@
 ## 1. 目的
 - Windows 11 上で常駐し、指定ホットゾーンにマウスポインタが入ったら即表示される軽量メモ帳を提供する。
 - Markdown テキストをタブ単位で管理し、色付けシンタックスハイライトとリンク遷移をサポートする。
-- 設定・データはアプリフォルダに保存し、レジストリは原則使用しない（自動起動フォールバック時のみ例外）。
+- 設定・データはアプリフォルダに保存し、レジストリは使用しない。
 
 ## 2. 固定要件
 - OS: Windows 11
@@ -50,8 +50,7 @@
   - `Win+Tab` 再発火防止クールダウンは 300ms
 - 自動起動:
   - 対応する
-  - 実装はスタートアップフォルダ（`.lnk`）を優先
-  - スタートアップフォルダ方式が失敗した場合のみ、レジストリ `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` を許可
+  - 実装はスタートアップフォルダ（`.lnk`）のみを使用
 - 保存:
   - 設定・データはアプリフォルダ内で完結
 - ログ:
@@ -94,11 +93,6 @@
     "topMost": true,
     "autoStartEnabled": false,
     "taskViewCooldownMs": 300
-  },
-  "startup": {
-    "preferredProvider": "StartupFolder",
-    "allowRegistryFallback": true,
-    "lastProvider": "None"
   },
   "logging": {
     "maxFileSizeKb": 100,
@@ -145,7 +139,7 @@
 - `HotCornerActionService`:
   - `Win+Tab` 入力送出
 - `StartupRegistrationService`:
-  - スタートアップフォルダ登録、必要時レジストリ登録
+  - スタートアップフォルダ登録
 - `EditorWindow`:
   - WPF ウィンドウ（AvalonEdit + タブ UI）
 - `TabService`:
@@ -207,9 +201,8 @@
 1. トレイメニューの「自動起動」をクリック。
 2. メニューのチェック状態を切り替え。
 3. 有効化時はスタートアップフォルダへの `.lnk` 作成を試行。
-4. 失敗時かつ `allowRegistryFallback=true` の場合のみ `HKCU\...\Run` を利用。
-5. 無効化時は `.lnk` と `HKCU\...\Run` の両方を解除。
-6. 設定へ状態と利用プロバイダを保存。
+4. 無効化時は `.lnk` を解除。
+5. 設定へ状態を保存。
 
 ## 7. マルチモニタ座標方針
 - 監視座標系は `VirtualScreen` 基準（全ディスプレイ統合座標）を採用する。
@@ -260,7 +253,7 @@
 3. タブ UI（追加、改名、削除、ホイール切替）
 4. AvalonEdit 組み込み、Markdown 色付け、リンク遷移
 5. dirty 管理と保存トリガー（非表示、タブ切替、終了）
-6. 自動起動登録（スタートアップフォルダ優先、レジストリフォールバック）
+6. 自動起動登録（スタートアップフォルダ）
 7. ログ出力と 100KB ローテーション
 8. 設定 UI（2つのホットゾーン位置・サイズ、ウィンドウ位置、自動起動）
 9. 長時間稼働確認

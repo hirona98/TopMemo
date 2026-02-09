@@ -1,6 +1,5 @@
 using System.IO;
 using System.Runtime.InteropServices;
-using Microsoft.Win32;
 
 namespace TopMemo.App.Services;
 
@@ -10,7 +9,6 @@ namespace TopMemo.App.Services;
 public sealed class StartupRegistrationService
 {
     private const string StartupEntryName = "TopMemo";
-    private const string RunRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private readonly string _executablePath;
 
     /// <summary>
@@ -25,45 +23,24 @@ public sealed class StartupRegistrationService
     /// <summary>
     /// 自動起動を有効化します。
     /// </summary>
-    /// <param name="allowRegistryFallback">レジストリフォールバック可否。</param>
-    /// <param name="provider">使用したプロバイダ。</param>
     /// <param name="errorMessage">失敗メッセージ。</param>
     /// <returns>成功した場合は true。</returns>
-    public bool Enable(bool allowRegistryFallback, out string provider, out string errorMessage)
+    public bool Enable(out string errorMessage)
     {
         // 既定戻り値を設定します。
-        provider = "None";
         errorMessage = string.Empty;
 
         try
         {
-            // まずスタートアップフォルダへの .lnk 作成を試行します。
+            // スタートアップフォルダへの .lnk 作成を試行します。
             CreateStartupShortcut();
-            provider = "StartupFolder";
             return true;
         }
         catch (Exception startupException)
         {
-            // フォールバック不可なら失敗を返します。
-            if (!allowRegistryFallback)
-            {
-                errorMessage = startupException.Message;
-                return false;
-            }
-
-            try
-            {
-                // フォールバックとして HKCU\Run を登録します。
-                EnableRegistryRun();
-                provider = "Registry";
-                return true;
-            }
-            catch (Exception registryException)
-            {
-                // 両方失敗した場合は複合メッセージを返します。
-                errorMessage = $"StartupFolder: {startupException.Message} / Registry: {registryException.Message}";
-                return false;
-            }
+            // 失敗時はエラーを返します。
+            errorMessage = startupException.Message;
+            return false;
         }
     }
 
@@ -79,9 +56,8 @@ public sealed class StartupRegistrationService
 
         try
         {
-            // 両方式の登録を解除します。
+            // スタートアップフォルダ登録を解除します。
             DeleteStartupShortcutIfExists();
-            DisableRegistryRunIfExists();
             return true;
         }
         catch (Exception exception)
@@ -98,8 +74,8 @@ public sealed class StartupRegistrationService
     /// <returns>有効なら true。</returns>
     public bool IsEnabled()
     {
-        // どちらかの登録が有効なら true を返します。
-        return File.Exists(GetShortcutPath()) || RegistryHasEntry();
+        // スタートアップフォルダ登録の有無を返します。
+        return File.Exists(GetShortcutPath());
     }
 
     /// <summary>
@@ -155,45 +131,6 @@ public sealed class StartupRegistrationService
     }
 
     /// <summary>
-    /// レジストリの Run 登録を有効化します。
-    /// </summary>
-    private void EnableRegistryRun()
-    {
-        // HKCU\Run にエントリを書き込みます。
-        using var runKey = Registry.CurrentUser.CreateSubKey(RunRegistryPath, writable: true);
-        if (runKey is null)
-        {
-            throw new InvalidOperationException("Failed to open HKCU Run key.");
-        }
-
-        runKey.SetValue(StartupEntryName, $"\"{_executablePath}\"", RegistryValueKind.String);
-    }
-
-    /// <summary>
-    /// レジストリ Run 登録を削除します。
-    /// </summary>
-    private void DisableRegistryRunIfExists()
-    {
-        // エントリが存在する場合のみ削除します。
-        using var runKey = Registry.CurrentUser.OpenSubKey(RunRegistryPath, writable: true);
-        if (runKey?.GetValue(StartupEntryName) is not null)
-        {
-            runKey.DeleteValue(StartupEntryName, throwOnMissingValue: false);
-        }
-    }
-
-    /// <summary>
-    /// レジストリエントリ存在有無を返します。
-    /// </summary>
-    /// <returns>存在する場合は true。</returns>
-    private static bool RegistryHasEntry()
-    {
-        // HKCU\Run のエントリ存在を確認します。
-        using var runKey = Registry.CurrentUser.OpenSubKey(RunRegistryPath, writable: false);
-        return runKey?.GetValue(StartupEntryName) is not null;
-    }
-
-    /// <summary>
     /// スタートアップショートカットパスを返します。
     /// </summary>
     /// <returns>ショートカットパス。</returns>
@@ -204,4 +141,3 @@ public sealed class StartupRegistrationService
         return Path.Combine(startupFolder, $"{StartupEntryName}.lnk");
     }
 }
-

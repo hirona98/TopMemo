@@ -21,11 +21,6 @@ public sealed class AppSettings
     public BehaviorSettings Behavior { get; set; } = new();
 
     /// <summary>
-    /// 自動起動設定を取得または設定します。
-    /// </summary>
-    public StartupSettings Startup { get; set; } = new();
-
-    /// <summary>
     /// ログ設定を取得または設定します。
     /// </summary>
     public LoggingSettings Logging { get; set; } = new();
@@ -61,12 +56,6 @@ public sealed class AppSettings
                 TopMost = true,
                 AutoStartEnabled = false,
                 TaskViewCooldownMs = 300
-            },
-            Startup = new StartupSettings
-            {
-                PreferredProvider = "StartupFolder",
-                AllowRegistryFallback = true,
-                LastProvider = "None"
             },
             Logging = new LoggingSettings
             {
@@ -168,27 +157,6 @@ public sealed class BehaviorSettings
     /// Win+Tab 再発火抑制時間（ミリ秒）を取得または設定します。
     /// </summary>
     public int TaskViewCooldownMs { get; set; }
-}
-
-/// <summary>
-/// 自動起動登録に関する設定です。
-/// </summary>
-public sealed class StartupSettings
-{
-    /// <summary>
-    /// 優先プロバイダ名を取得または設定します。
-    /// </summary>
-    public string PreferredProvider { get; set; } = "StartupFolder";
-
-    /// <summary>
-    /// レジストリフォールバック可否を取得または設定します。
-    /// </summary>
-    public bool AllowRegistryFallback { get; set; } = true;
-
-    /// <summary>
-    /// 最後に使用したプロバイダ名を取得または設定します。
-    /// </summary>
-    public string LastProvider { get; set; } = "None";
 }
 
 /// <summary>

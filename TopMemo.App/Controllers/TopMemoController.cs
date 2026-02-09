@@ -256,20 +256,11 @@ public sealed class TopMemoController : IDisposable
         // 設定上有効なら登録を試行します。
         if (_settings.Behavior.AutoStartEnabled)
         {
-            var enabled = _startupRegistrationService.Enable(
-                _settings.Startup.AllowRegistryFallback,
-                out var provider,
-                out var errorMessage);
+            var enabled = _startupRegistrationService.Enable(out _);
 
-            if (enabled)
-            {
-                _settings.Startup.LastProvider = provider;
-            }
-            else
+            if (!enabled)
             {
                 _settings.Behavior.AutoStartEnabled = false;
-                _settings.Startup.LastProvider = "None";
-                _loggingService.Error($"自動起動の有効化に失敗しました。{errorMessage}");
             }
         }
 
@@ -669,23 +660,17 @@ public sealed class TopMemoController : IDisposable
         // 要求状態に応じて登録/解除を実行します。
         if (enabled)
         {
-            var success = _startupRegistrationService.Enable(
-                _settings.Startup.AllowRegistryFallback,
-                out var provider,
-                out var errorMessage);
+            var success = _startupRegistrationService.Enable(out _);
             if (!success)
             {
-                _loggingService.Error($"自動起動の有効化に失敗しました。{errorMessage}");
-                ShowMessageDialog("自動起動の有効化に失敗しました。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+                // 失敗時はフォールバックせず状態だけ元へ戻します。
                 _settings.Behavior.AutoStartEnabled = false;
-                _settings.Startup.LastProvider = "None";
                 _trayService.SetAutoStartState(false);
                 _storageService.SaveSettings(_settings);
                 return;
             }
 
             _settings.Behavior.AutoStartEnabled = true;
-            _settings.Startup.LastProvider = provider;
         }
         else
         {
@@ -701,7 +686,6 @@ public sealed class TopMemoController : IDisposable
             }
 
             _settings.Behavior.AutoStartEnabled = false;
-            _settings.Startup.LastProvider = "None";
         }
 
         // 設定を保存してトレイ状態を同期します。

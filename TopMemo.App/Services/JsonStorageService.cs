@@ -265,7 +265,6 @@ public sealed class JsonStorageService
             settings.HotZones is null ||
             settings.EditorWindow is null ||
             settings.Behavior is null ||
-            settings.Startup is null ||
             settings.Logging is null ||
             settings.Theme is null)
         {

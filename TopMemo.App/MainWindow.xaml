@@ -151,7 +151,7 @@
                                 Margin="0">
                             <avalonEdit:TextEditor x:Name="TabMemoEditor"
                                                    Tag="{Binding}"
-                                                   ShowLineNumbers="False"
+                                                   ShowLineNumbers="True"
                                                    Margin="0"
                                                    Padding="5"
                                                    Background="White"

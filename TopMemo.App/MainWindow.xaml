@@ -103,8 +103,6 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <!-- 現在タブのファイルパスを表示します。 -->
@@ -112,23 +110,7 @@
                          Grid.Column="0"
                          IsReadOnly="True"
                          VerticalContentAlignment="Center"
-                         Margin="0,0,6,0"
                          HorizontalScrollBarVisibility="Auto" />
-
-                <!-- 現在パスのファイルを開きます。 -->
-                <Button Grid.Column="1"
-                        Content="開く"
-                        Width="72"
-                        Margin="0,0,6,0"
-                        Style="{StaticResource DisabledButtonStyle}"
-                        Click="OpenPathButton_Click" />
-
-                <!-- 新規タブを追加します。 -->
-                <Button Grid.Column="2"
-                        Content="追加"
-                        Width="72"
-                        Style="{StaticResource DisabledButtonStyle}"
-                        Click="AddTabButton_Click" />
             </Grid>
         </Border>
 
@@ -141,6 +123,7 @@
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"
                         SelectionChanged="MemoTabControl_SelectionChanged"
+                        PreviewMouseRightButtonDown="MemoTabControl_PreviewMouseRightButtonDown"
                         PreviewMouseWheel="MemoTabControl_PreviewMouseWheel"
                         Margin="0">
                 <TabControl.ItemTemplate>

@@ -411,7 +411,7 @@ public sealed class TopMemoController : IDisposable
 
         try
         {
-            // 先に実ファイルを削除してからタブを削除します。
+            // 先に実ファイルを削除してからタブを閉じるします。
             _storageService.DeleteMemo(tab.FileName);
             RemoveTab(tab);
         }

@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -23,6 +24,7 @@ public partial class MainWindow : Window
     private bool _allowClose;
     private MemoTabViewModel? _contextMenuTargetTab;
     private readonly ContextMenu _tabContextMenu = new();
+    private readonly ContextMenu _tabRowContextMenu = new();
 
     /// <summary>
     /// 初期化します。
@@ -33,6 +35,7 @@ public partial class MainWindow : Window
 
         // タブ右クリックメニューを構築します。
         BuildTabContextMenu();
+        BuildTabRowContextMenu();
 
         // 閉じる操作を非表示へ変換するため Closing を購読します。
         Closing += MainWindow_Closing;
@@ -273,6 +276,55 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// タブ行右クリックメニューを組み立てます。
+    /// </summary>
+    private void BuildTabRowContextMenu()
+    {
+        // 「ファイルの作成」メニューを作成します。
+        var createFileItem = new MenuItem { Header = "ファイルの作成" };
+        createFileItem.Click += (_, _) => AddTabRequested?.Invoke();
+
+        // 「ファイルを開く」メニューを作成します。
+        var openFileItem = new MenuItem { Header = "ファイルを開く" };
+        openFileItem.Click += (_, _) => OpenFileDialogRequested?.Invoke();
+
+        // メニューへ項目を追加します。
+        _tabRowContextMenu.Items.Add(createFileItem);
+        _tabRowContextMenu.Items.Add(openFileItem);
+    }
+
+    /// <summary>
+    /// タブ行右クリック時に新規/開くメニューを表示します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoTabControl_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs eventArgs)
+    {
+        // クリック対象が無い場合は処理しません。
+        if (eventArgs.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
+        // タブ本体上の右クリックは既存メニューへ委譲します。
+        if (FindAncestor<TabItem>(source) is not null)
+        {
+            return;
+        }
+
+        // タブ行以外ではメニューを表示しません。
+        if (FindAncestor<TabPanel>(source) is null)
+        {
+            return;
+        }
+
+        // タブ行向けメニューを開きます。
+        _tabRowContextMenu.PlacementTarget = MemoTabControl;
+        _tabRowContextMenu.IsOpen = true;
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
     /// タブヘッダのマウスホイール処理です。
     /// </summary>
     /// <param name="sender">送信元。</param>
@@ -335,8 +387,8 @@ public partial class MainWindow : Window
             }
         };
 
-        // 「タブを削除」メニューを作成します。
-        var deleteTabItem = new MenuItem { Header = "タブを削除" };
+        // 「タブを閉じる」メニューを作成します。
+        var deleteTabItem = new MenuItem { Header = "タブを閉じる" };
         deleteTabItem.Click += (_, _) =>
         {
             if (_contextMenuTargetTab is not null)
@@ -558,6 +610,29 @@ public partial class MainWindow : Window
             {
                 return nested;
             }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 可視ツリーから指定型の祖先要素を探索します。
+    /// </summary>
+    /// <typeparam name="T">探索対象型。</typeparam>
+    /// <param name="current">探索開始要素。</param>
+    /// <returns>見つかった祖先。無い場合は null。</returns>
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        // 親方向へ辿って最初の一致を返します。
+        var node = current;
+        while (node is not null)
+        {
+            if (node is T matched)
+            {
+                return matched;
+            }
+
+            node = VisualTreeHelper.GetParent(node);
         }
 
         return null;

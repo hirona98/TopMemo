@@ -37,6 +37,7 @@ public sealed class TopMemoController : IDisposable
     private HotZoneMonitorService? _hotZoneMonitorService;
     private MemoTabViewModel? _activeTab;
     private bool _isExiting;
+    private int _activeDialogCount;
 
     /// <summary>
     /// 初期化します。
@@ -326,7 +327,8 @@ public sealed class TopMemoController : IDisposable
         {
             Owner = _window
         };
-        if (dialog.ShowDialog() != true)
+        var renameResult = RunDialogGuarded(() => dialog.ShowDialog());
+        if (renameResult != true)
         {
             return;
         }
@@ -337,7 +339,7 @@ public sealed class TopMemoController : IDisposable
         // 同名のタブ名は許可しません。
         if (TabFileNameService.IsDuplicatedFileName(newFileName, _tabs, tab.Id))
         {
-            WpfMessageBox.Show(_window, "同じファイル名のタブは作成できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Warning);
+            ShowMessageDialog("同じファイル名のタブは作成できません。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Warning);
             return;
         }
 
@@ -364,7 +366,7 @@ public sealed class TopMemoController : IDisposable
         {
             // 改名失敗を通知して戻します。
             _loggingService.Error("タブ名変更に失敗しました。", exception);
-            WpfMessageBox.Show(_window, "タブ名変更に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+            ShowMessageDialog("タブ名変更に失敗しました。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
         }
     }
 
@@ -398,10 +400,8 @@ public sealed class TopMemoController : IDisposable
         }
 
         // ファイル削除確認を表示します。
-        var confirmation = WpfMessageBox.Show(
-            _window,
+        var confirmation = ShowMessageDialog(
             $"ファイル \"{tab.FileName}\" を削除しますか？\nこの操作は元に戻せません。",
-            "TopMemo",
             WpfMessageBoxButton.YesNo,
             WpfMessageBoxImage.Warning);
         if (confirmation != WpfMessageBoxResult.Yes)
@@ -419,7 +419,7 @@ public sealed class TopMemoController : IDisposable
         {
             // 削除失敗を通知します。
             _loggingService.Error($"ファイル削除に失敗しました。file={tab.FileName}", exception);
-            WpfMessageBox.Show(_window, "ファイル削除に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+            ShowMessageDialog("ファイル削除に失敗しました。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
         }
     }
 
@@ -508,7 +508,8 @@ public sealed class TopMemoController : IDisposable
             CheckFileExists = true,
             Multiselect = false
         };
-        if (dialog.ShowDialog(_window) != true)
+        var openResult = RunDialogGuarded(() => dialog.ShowDialog(_window));
+        if (openResult != true)
         {
             return;
         }
@@ -530,7 +531,7 @@ public sealed class TopMemoController : IDisposable
         if (existingTab is not null)
         {
             // 同一ファイルの重複オープンを禁止します。
-            WpfMessageBox.Show(_window, "同じファイルは既に開いています。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+            ShowMessageDialog("同じファイルは既に開いています。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
             return;
         }
 
@@ -566,7 +567,7 @@ public sealed class TopMemoController : IDisposable
             if (!success)
             {
                 _loggingService.Error($"自動起動の有効化に失敗しました。{errorMessage}");
-                WpfMessageBox.Show(_window, "自動起動の有効化に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+                ShowMessageDialog("自動起動の有効化に失敗しました。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
                 _settings.Behavior.AutoStartEnabled = false;
                 _settings.Startup.LastProvider = "None";
                 _trayService.SetAutoStartState(false);
@@ -583,7 +584,7 @@ public sealed class TopMemoController : IDisposable
             if (!success)
             {
                 _loggingService.Error($"自動起動の無効化に失敗しました。{errorMessage}");
-                WpfMessageBox.Show(_window, "自動起動の無効化に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+                ShowMessageDialog("自動起動の無効化に失敗しました。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
                 _settings.Behavior.AutoStartEnabled = true;
                 _trayService.SetAutoStartState(true);
                 _storageService.SaveSettings(_settings);
@@ -617,6 +618,12 @@ public sealed class TopMemoController : IDisposable
     /// </summary>
     private void HideEditorAndSave()
     {
+        // いずれかのダイアログ表示中は非表示にしません。
+        if (_activeDialogCount > 0)
+        {
+            return;
+        }
+
         // 表示中のみ保存と非表示を実行します。
         if (!_window.IsEditorVisible)
         {
@@ -730,7 +737,7 @@ public sealed class TopMemoController : IDisposable
             return true;
         }
 
-        WpfMessageBox.Show(_window, "最後の1タブは削除できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+        ShowMessageDialog("最後の1タブは削除できません。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
         return false;
     }
 
@@ -764,5 +771,48 @@ public sealed class TopMemoController : IDisposable
         // 表示更新と永続化を実行します。
         UpdateCurrentMemoPath();
         SaveTabsState();
+    }
+
+    /// <summary>
+    /// ダイアログ表示を監視抑止付きで実行します。
+    /// </summary>
+    /// <typeparam name="TResult">戻り値型。</typeparam>
+    /// <param name="dialogAction">ダイアログ処理。</param>
+    /// <returns>ダイアログ戻り値。</returns>
+    private TResult RunDialogGuarded<TResult>(Func<TResult> dialogAction)
+    {
+        // 初回突入時にホットゾーン監視を停止します。
+        if (_activeDialogCount == 0)
+        {
+            _hotZoneMonitorService?.Stop();
+        }
+
+        _activeDialogCount++;
+        try
+        {
+            return dialogAction();
+        }
+        finally
+        {
+            // ダイアログ終了時に監視を再開します。
+            _activeDialogCount--;
+            if (_activeDialogCount == 0 && !_isExiting)
+            {
+                _hotZoneMonitorService?.Start();
+            }
+        }
+    }
+
+    /// <summary>
+    /// メッセージダイアログを監視抑止付きで表示します。
+    /// </summary>
+    /// <param name="message">表示文言。</param>
+    /// <param name="button">ボタン種別。</param>
+    /// <param name="image">アイコン種別。</param>
+    /// <returns>ユーザー選択結果。</returns>
+    private WpfMessageBoxResult ShowMessageDialog(string message, WpfMessageBoxButton button, WpfMessageBoxImage image)
+    {
+        // MessageBox 表示を共通ガードで実行します。
+        return RunDialogGuarded(() => WpfMessageBox.Show(_window, message, "TopMemo", button, image));
     }
 }

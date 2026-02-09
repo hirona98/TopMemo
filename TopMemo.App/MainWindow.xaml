@@ -160,6 +160,48 @@
                     </DataTemplate>
                 </TabControl.ContentTemplate>
             </TabControl>
+
+            <!-- タブが無い場合だけ下部に使い方を表示します。 -->
+            <Border HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Margin="12,0,12,12"
+                    Padding="12,10"
+                    Background="#F7F9FC"
+                    BorderBrush="#D9E1EF"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    IsHitTestVisible="False">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility"
+                                Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ElementName=MemoTabControl, Path=HasItems}"
+                                         Value="True">
+                                <Setter Property="Visibility"
+                                        Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <TextBlock Foreground="#1F2A44"
+                               FontWeight="SemiBold"
+                               Text="タブがありません（最初に1つ作成してください）" />
+                    <TextBlock Margin="0,6,0,0"
+                               Foreground="#4A5568"
+                               Text="1. タブ行を右クリックします。" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#4A5568"
+                               Text="2. 「ファイルの作成」で新規メモを作るか、「ファイルを開く」で既存メモを開きます。" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#4A5568"
+                               Text="3. タブを右クリックすると「名前変更」「タブを閉じる」「ファイルを削除」が使えます。" />
+                    <TextBlock Margin="0,2,0,0"
+                               Foreground="#4A5568"
+                               Text="4. トレイアイコン右クリックで「表示/非表示」「自動起動」「終了」を操作できます。" />
+                </StackPanel>
+            </Border>
         </Grid>
     </DockPanel>
 </Window>

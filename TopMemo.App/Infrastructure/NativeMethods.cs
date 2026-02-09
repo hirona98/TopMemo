@@ -13,9 +13,19 @@ internal static class NativeMethods
     internal const int GwlExStyle = -20;
 
     /// <summary>
+    /// ウィンドウスタイル取得インデックスです。
+    /// </summary>
+    internal const int GwlStyle = -16;
+
+    /// <summary>
     /// Alt+Tab 非表示のための拡張スタイルです。
     /// </summary>
     internal const int WsExToolWindow = 0x00000080;
+
+    /// <summary>
+    /// システムメニュー有効化スタイルです。
+    /// </summary>
+    internal const int WsSysMenu = 0x00080000;
 
     /// <summary>
     /// キー入力種別フラグです。
@@ -143,6 +153,36 @@ internal static class NativeMethods
         }
 
         SetWindowLong32(hWnd, GwlExStyle, value.ToInt32());
+    }
+
+    /// <summary>
+    /// 現在環境に合わせてウィンドウスタイルを取得します。
+    /// </summary>
+    /// <param name="hWnd">ウィンドウハンドル。</param>
+    /// <returns>スタイル値。</returns>
+    internal static nint GetWindowStyle(nint hWnd)
+    {
+        // x64 と x86 で呼び出し先を切り替えます。
+        return IntPtr.Size == 8
+            ? GetWindowLongPtr64(hWnd, GwlStyle)
+            : GetWindowLong32(hWnd, GwlStyle);
+    }
+
+    /// <summary>
+    /// 現在環境に合わせてウィンドウスタイルを設定します。
+    /// </summary>
+    /// <param name="hWnd">ウィンドウハンドル。</param>
+    /// <param name="value">設定値。</param>
+    internal static void SetWindowStyle(nint hWnd, nint value)
+    {
+        // x64 と x86 で呼び出し先を切り替えます。
+        if (IntPtr.Size == 8)
+        {
+            SetWindowLongPtr64(hWnd, GwlStyle, value);
+            return;
+        }
+
+        SetWindowLong32(hWnd, GwlStyle, value.ToInt32());
     }
 }
 

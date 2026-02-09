@@ -242,8 +242,12 @@ public partial class MainWindow : Window
     /// <param name="eventArgs">イベント引数。</param>
     private void MainWindow_SourceInitialized(object? sender, EventArgs eventArgs)
     {
-        // Alt+Tab 非表示のため WS_EX_TOOLWINDOW を付与します。
+        // 右上の閉じるボタンを非表示にするため WS_SYSMENU を外します。
         var handle = new WindowInteropHelper(this).Handle;
+        var style = NativeMethods.GetWindowStyle(handle);
+        NativeMethods.SetWindowStyle(handle, style & ~((nint)NativeMethods.WsSysMenu));
+
+        // Alt+Tab 非表示のため WS_EX_TOOLWINDOW を付与します。
         var exStyle = NativeMethods.GetWindowLongPtr(handle);
         NativeMethods.SetWindowLongPtr(handle, exStyle | NativeMethods.WsExToolWindow);
     }

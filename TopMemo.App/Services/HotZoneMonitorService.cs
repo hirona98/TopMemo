@@ -101,7 +101,7 @@ internal sealed class HotZoneMonitorService : IDisposable
         }
 
         // Win+Tab と表示ゾーンの侵入判定を行います。
-        var inTaskViewZone = IsInZone(point, _settings.HotZones.SendTaskView);
+        var inTaskViewZone = IsInTaskViewZone(point, _settings.HotZones.SendTaskView);
         var inShowZone = !inTaskViewZone && IsInZone(point, _settings.HotZones.ShowEditor);
 
         // Win+Tab は重複時優先で発火します。
@@ -191,5 +191,27 @@ internal sealed class HotZoneMonitorService : IDisposable
         var right = zone.X + zone.Width;
         var bottom = zone.Y + zone.Height;
         return point.X >= zone.X && point.X < right && point.Y >= zone.Y && point.Y < bottom;
+    }
+
+    /// <summary>
+    /// 座標が Win+Tab 用の左下ゾーン内かを判定します。
+    /// </summary>
+    /// <param name="point">カーソル座標。</param>
+    /// <param name="zone">ゾーン設定（幅・高さのみ使用）。</param>
+    /// <returns>内包する場合は true。</returns>
+    private static bool IsInTaskViewZone(NativePoint point, ZoneSetting zone)
+    {
+        // 主ディスプレイ左下基準でゾーン矩形を計算します。
+        var zoneWidth = Math.Max(1, zone.Width);
+        var zoneHeight = Math.Max(1, zone.Height);
+        var left = 0;
+        var top = 0;
+        var primaryHeight = Math.Max(1, NativeMethods.GetSystemMetrics(NativeMethods.SmCyScreen));
+        var zoneTop = top + primaryHeight - zoneHeight;
+        var zoneRight = left + zoneWidth;
+        var zoneBottom = zoneTop + zoneHeight;
+
+        // 矩形内包判定を実施します。
+        return point.X >= left && point.X < zoneRight && point.Y >= zoneTop && point.Y < zoneBottom;
     }
 }

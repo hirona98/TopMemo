@@ -696,7 +696,8 @@ public sealed class TopMemoController : IDisposable
         var sent = _taskViewInputService.SendWinTab();
         if (!sent)
         {
-            _loggingService.Error("Win+Tab の送出に失敗しました。");
+            _loggingService.Error(
+                $"Win+Tab の送出に失敗しました。sent={_taskViewInputService.LastSentCount}, error={_taskViewInputService.LastErrorCode}");
         }
     }
 

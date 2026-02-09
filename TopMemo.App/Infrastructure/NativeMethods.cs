@@ -33,9 +33,24 @@ internal static class NativeMethods
     internal const uint InputKeyboard = 1;
 
     /// <summary>
+    /// 主ディスプレイ幅を取得するシステムメトリクスです。
+    /// </summary>
+    internal const int SmCxScreen = 0;
+
+    /// <summary>
+    /// 主ディスプレイ高さを取得するシステムメトリクスです。
+    /// </summary>
+    internal const int SmCyScreen = 1;
+
+    /// <summary>
     /// キー離上フラグです。
     /// </summary>
     internal const uint KeyEventFKeyUp = 0x0002;
+
+    /// <summary>
+    /// 拡張キー入力フラグです。
+    /// </summary>
+    internal const uint KeyEventFExtendedKey = 0x0001;
 
     /// <summary>
     /// 左 Windows キーの仮想キーコードです。
@@ -59,6 +74,14 @@ internal static class NativeMethods
     /// <returns>取得に成功した場合は true。</returns>
     [DllImport("user32.dll")]
     internal static extern bool GetCursorPos(out Point point);
+
+    /// <summary>
+    /// システムメトリクス値を取得します。
+    /// </summary>
+    /// <param name="nIndex">メトリクス種別。</param>
+    /// <returns>メトリクス値。</returns>
+    [DllImport("user32.dll")]
+    internal static extern int GetSystemMetrics(int nIndex);
 
     /// <summary>
     /// 指定キーの押下状態を取得します。
@@ -265,10 +288,59 @@ internal struct Input
 internal struct InputUnion
 {
     /// <summary>
+    /// マウス入力です。
+    /// </summary>
+    [FieldOffset(0)]
+    public MouseInput Mouse;
+
+    /// <summary>
     /// キーボード入力です。
     /// </summary>
     [FieldOffset(0)]
     public KeyboardInput Keyboard;
+
+    /// <summary>
+    /// ハードウェア入力です。
+    /// </summary>
+    [FieldOffset(0)]
+    public HardwareInput Hardware;
+}
+
+/// <summary>
+/// マウス入力構造体です。
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct MouseInput
+{
+    /// <summary>
+    /// X 方向移動量です。
+    /// </summary>
+    public int Dx;
+
+    /// <summary>
+    /// Y 方向移動量です。
+    /// </summary>
+    public int Dy;
+
+    /// <summary>
+    /// 追加マウスデータです。
+    /// </summary>
+    public uint MouseData;
+
+    /// <summary>
+    /// 入力フラグです。
+    /// </summary>
+    public uint Flags;
+
+    /// <summary>
+    /// タイムスタンプです。
+    /// </summary>
+    public uint Time;
+
+    /// <summary>
+    /// 追加情報です。
+    /// </summary>
+    public nint ExtraInfo;
 }
 
 /// <summary>
@@ -301,4 +373,26 @@ internal struct KeyboardInput
     /// 追加情報です。
     /// </summary>
     public nint ExtraInfo;
+}
+
+/// <summary>
+/// ハードウェア入力構造体です。
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct HardwareInput
+{
+    /// <summary>
+    /// メッセージ番号です。
+    /// </summary>
+    public uint Msg;
+
+    /// <summary>
+    /// 下位パラメータです。
+    /// </summary>
+    public ushort ParamL;
+
+    /// <summary>
+    /// 上位パラメータです。
+    /// </summary>
+    public ushort ParamH;
 }

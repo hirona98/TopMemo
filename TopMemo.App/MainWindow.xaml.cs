@@ -133,6 +133,9 @@ public partial class MainWindow : Window
         _suppressTabSelectionChanged = true;
         MemoTabControl.SelectedItem = tab;
         _suppressTabSelectionChanged = false;
+
+        // プログラム選択時も本文を同期します。
+        SyncSelectedTabEditorText();
     }
 
     /// <summary>

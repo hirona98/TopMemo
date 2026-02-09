@@ -524,6 +524,18 @@ public sealed class TopMemoController : IDisposable
     /// <param name="textEditor">初期化済みエディタ。</param>
     private void HandleEditorLoaded(TextEditor textEditor)
     {
+        // 既定フォントより 1 段階大きいサイズを適用します。
+        textEditor.FontSize = System.Windows.SystemFonts.MessageFontSize + 1.0;
+
+        // 行間は既定相当に 1px 加算してわずかに広げます。
+        var baseLineHeight = textEditor.FontSize * textEditor.FontFamily.LineSpacing;
+        textEditor.TextArea.TextView.SetValue(
+            System.Windows.Documents.Block.LineHeightProperty,
+            baseLineHeight + 1.0);
+        textEditor.TextArea.TextView.SetValue(
+            System.Windows.Documents.Block.LineStackingStrategyProperty,
+            System.Windows.LineStackingStrategy.BlockLineHeight);
+
         // Markdown 色付けを適用します。
         _markdownHighlightService.Apply(textEditor);
     }

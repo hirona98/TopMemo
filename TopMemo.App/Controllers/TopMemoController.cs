@@ -4,6 +4,7 @@ using System.Linq;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
 using Win32OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using Win32SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using TopMemo.App.Models;
 using TopMemo.App.Services;
 using TopMemo.App.ViewModels;
@@ -26,7 +27,6 @@ public sealed class TopMemoController : IDisposable
     private readonly FilePathService _filePathService;
     private readonly LoggingService _loggingService;
     private readonly JsonStorageService _storageService;
-    private readonly TabFileNameService _tabFileNameService;
     private readonly MarkdownHighlightService _markdownHighlightService;
     private readonly LinkNavigationService _linkNavigationService;
     private readonly TaskViewInputService _taskViewInputService;
@@ -59,7 +59,6 @@ public sealed class TopMemoController : IDisposable
         _storageService = new JsonStorageService(_filePathService, _loggingService);
 
         // 補助サービスを初期化します。
-        _tabFileNameService = new TabFileNameService(_storageService);
         _markdownHighlightService = new MarkdownHighlightService();
         _linkNavigationService = new LinkNavigationService();
         _taskViewInputService = new TaskViewInputService();
@@ -291,28 +290,72 @@ public sealed class TopMemoController : IDisposable
     /// </summary>
     private void HandleAddTabRequested()
     {
-        // タブ切替前に未保存内容を保存します。
+        // 初期表示ディレクトリを現在タブ基準で決定します。
+        var initialDirectory = _filePathService.MemosDirectory;
+        if (_activeTab is not null && Path.IsPathRooted(_activeTab.FileName))
+        {
+            initialDirectory = Path.GetDirectoryName(_activeTab.FileName) ?? _filePathService.MemosDirectory;
+        }
+
+        // 新規作成ダイアログを表示します。
+        var dialog = new Win32SaveFileDialog
+        {
+            Title = "新しいファイルを作成",
+            InitialDirectory = initialDirectory,
+            Filter = "Markdown (*.md)|*.md|すべてのファイル (*.*)|*.*",
+            AddExtension = true,
+            DefaultExt = ".md",
+            OverwritePrompt = false
+        };
+        var createResult = RunDialogGuarded(() => dialog.ShowDialog(_window));
+        if (createResult != true)
+        {
+            return;
+        }
+
+        // 選択パスを正規化します。
+        var selectedPath = Path.GetFullPath(dialog.FileName);
+        var selectedFileName = Path.GetFileName(selectedPath);
+        if (string.IsNullOrWhiteSpace(selectedFileName))
+        {
+            return;
+        }
+
+        // 同一ファイルが既に開いている場合は作成しません。
+        var existingTab = _tabs.FirstOrDefault(tab =>
+            string.Equals(ResolveTabFilePath(tab.FileName), selectedPath, StringComparison.OrdinalIgnoreCase));
+        if (existingTab is not null)
+        {
+            ShowMessageDialog("同じファイルは既に開いています。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+            return;
+        }
+
+        // 既存ファイルは新規作成対象外です。
+        if (File.Exists(selectedPath))
+        {
+            ShowMessageDialog("既に存在するファイルです。ファイルを開くを使用してください。", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+            return;
+        }
+
+        // 切替前に未保存内容を保存します。
         SaveDirtyTabs();
 
-        // 既定名からユニークなファイル名を生成します。
-        var fileName = _tabFileNameService.BuildUniqueFileName("memo.md", _tabs);
-        var tab = new MemoTabViewModel
+        // 空ファイルを作成してタブを追加します。
+        _storageService.SaveMemo(selectedPath, string.Empty);
+        var createdTab = new MemoTabViewModel
         {
             Id = $"tab-{Guid.NewGuid():N}",
-            Title = fileName,
-            FileName = fileName,
+            Title = selectedFileName,
+            FileName = selectedPath,
             Content = string.Empty,
             IsDirty = false
         };
-
-        // タブを追加して空ファイルを作成します。
-        _tabs.Add(tab);
-        _storageService.SaveMemo(fileName, string.Empty);
+        _tabs.Add(createdTab);
 
         // 状態を保存して新規タブへ移動します。
         SaveTabsState();
-        _activeTab = tab;
-        _window.SelectTab(tab);
+        _activeTab = createdTab;
+        _window.SelectTab(createdTab);
         UpdateCurrentMemoPath();
     }
 

@@ -94,25 +94,16 @@
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
-        <!-- 下部の操作帯にパス表示と操作ボタンを配置します。 -->
-        <Border DockPanel.Dock="Bottom"
-                Background="#F5F5F5"
-                Padding="4"
-                BorderBrush="#E0E0E0"
-                BorderThickness="0,1,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <!-- 現在タブのファイルパスを表示します。 -->
-                <TextBox Name="CurrentPathTextBox"
-                         Grid.Column="0"
-                         IsReadOnly="True"
-                         VerticalContentAlignment="Center"
-                         HorizontalScrollBarVisibility="Auto" />
-            </Grid>
-        </Border>
+        <!-- 下部に現在タブのファイルパスをステータスバー表示します。 -->
+        <StatusBar DockPanel.Dock="Bottom"
+                   Background="#F5F5F5"
+                   BorderBrush="#E0E0E0"
+                   BorderThickness="0,1,0,0">
+            <StatusBarItem HorizontalContentAlignment="Stretch">
+                <TextBlock Name="CurrentPathTextBlock"
+                           TextTrimming="CharacterEllipsis" />
+            </StatusBarItem>
+        </StatusBar>
 
         <!-- メイン領域を余白なしで配置します。 -->
         <Grid Margin="0">

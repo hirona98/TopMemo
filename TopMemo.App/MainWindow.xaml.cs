@@ -131,8 +131,8 @@ public partial class MainWindow : Window
     public void SetCurrentMemoPath(string memoPath)
     {
         // パス表示へ最新値を反映します。
-        CurrentPathTextBox.Text = memoPath;
-        CurrentPathTextBox.ToolTip = memoPath;
+        CurrentPathTextBlock.Text = memoPath;
+        CurrentPathTextBlock.ToolTip = memoPath;
     }
 
     /// <summary>

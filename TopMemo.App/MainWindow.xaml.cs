@@ -25,6 +25,10 @@ public partial class MainWindow : Window
     private bool _isTabDragInProgress;
     private System.Windows.Point _tabDragStartPoint;
     private MemoTabViewModel? _dragSourceTab;
+    private bool _isWindowMoveDragInProgress;
+    private System.Windows.Point _windowMoveStartCursorPoint;
+    private double _windowMoveStartLeft;
+    private double _windowMoveStartTop;
     private MemoTabViewModel? _contextMenuTargetTab;
     private readonly ContextMenu _tabContextMenu = new();
     private readonly ContextMenu _tabRowContextMenu = new();
@@ -696,6 +700,120 @@ public partial class MainWindow : Window
         {
             eventArgs.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// エディタ右ボタンダウン時にウィンドウ移動ドラッグを開始します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs eventArgs)
+    {
+        // 対象がテキストエディタでない場合は処理しません。
+        if (sender is not TextEditor editor)
+        {
+            return;
+        }
+
+        // 右ドラッグ移動の開始状態を保持します。
+        _isWindowMoveDragInProgress = true;
+        _windowMoveStartCursorPoint = GetCursorPositionInDip();
+        _windowMoveStartLeft = Left;
+        _windowMoveStartTop = Top;
+
+        // ドラッグ中イベント継続のためキャプチャします。
+        editor.CaptureMouse();
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// エディタ上のマウス移動でウィンドウ位置を更新します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs eventArgs)
+    {
+        // 右ドラッグ中でない場合は処理しません。
+        if (!_isWindowMoveDragInProgress)
+        {
+            return;
+        }
+
+        // 右ボタンが離されたらドラッグを終了します。
+        if (sender is not TextEditor editor || eventArgs.RightButton != MouseButtonState.Pressed)
+        {
+            EndWindowMoveDrag(editor: sender as TextEditor);
+            return;
+        }
+
+        // 開始位置との差分でウィンドウ位置を更新します。
+        var currentCursorPoint = GetCursorPositionInDip();
+        Left = _windowMoveStartLeft + (currentCursorPoint.X - _windowMoveStartCursorPoint.X);
+        Top = _windowMoveStartTop + (currentCursorPoint.Y - _windowMoveStartCursorPoint.Y);
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// エディタ右ボタンアップ時にウィンドウ移動ドラッグを終了します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs eventArgs)
+    {
+        // 右ドラッグ状態を終了します。
+        EndWindowMoveDrag(editor: sender as TextEditor);
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// エディタのマウスキャプチャ喪失時にドラッグ状態を解除します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoEditor_LostMouseCapture(object sender, System.Windows.Input.MouseEventArgs eventArgs)
+    {
+        // キャプチャ喪失時はドラッグ状態を必ず解除します。
+        _isWindowMoveDragInProgress = false;
+    }
+
+    /// <summary>
+    /// ウィンドウ移動ドラッグ状態を終了します。
+    /// </summary>
+    /// <param name="editor">対象エディタ。</param>
+    private void EndWindowMoveDrag(TextEditor? editor)
+    {
+        // ドラッグ状態を解除します。
+        _isWindowMoveDragInProgress = false;
+
+        // 取得中のマウスキャプチャを解除します。
+        if (editor?.IsMouseCaptured == true)
+        {
+            editor.ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>
+    /// 現在カーソル位置を DIP 座標で取得します。
+    /// </summary>
+    /// <returns>DIP 座標。</returns>
+    private System.Windows.Point GetCursorPositionInDip()
+    {
+        // Win32 カーソル座標を取得できない場合は原点を返します。
+        if (!NativeMethods.GetCursorPos(out var screenPoint))
+        {
+            return new System.Windows.Point(0, 0);
+        }
+
+        // 変換行列が取得できない場合は生座標を返します。
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is null)
+        {
+            return new System.Windows.Point(screenPoint.X, screenPoint.Y);
+        }
+
+        // 画面ピクセルを DIP 座標へ変換します。
+        var transform = source.CompositionTarget.TransformFromDevice;
+        return transform.Transform(new System.Windows.Point(screenPoint.X, screenPoint.Y));
     }
 
     /// <summary>

@@ -160,6 +160,10 @@
                                                    VerticalScrollBarVisibility="Auto"
                                                    Loaded="MemoEditor_Loaded"
                                                    Unloaded="MemoEditor_Unloaded"
+                                                   PreviewMouseRightButtonDown="MemoEditor_PreviewMouseRightButtonDown"
+                                                   PreviewMouseMove="MemoEditor_PreviewMouseMove"
+                                                   PreviewMouseRightButtonUp="MemoEditor_PreviewMouseRightButtonUp"
+                                                   LostMouseCapture="MemoEditor_LostMouseCapture"
                                                    PreviewMouseLeftButtonUp="MemoEditor_PreviewMouseLeftButtonUp" />
                         </Border>
                     </DataTemplate>

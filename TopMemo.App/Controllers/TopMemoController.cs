@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
+using Win32OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using TopMemo.App.Models;
 using TopMemo.App.Services;
 using TopMemo.App.ViewModels;
@@ -79,6 +81,7 @@ public sealed class TopMemoController : IDisposable
         // エディタ表示設定を反映します。
         _window.BindTabs(_tabs);
         SelectInitialTab();
+        UpdateCurrentMemoPath();
         ShowEditor();
 
         // 自動起動状態を初期化します。
@@ -175,14 +178,15 @@ public sealed class TopMemoController : IDisposable
         _tabs.Clear();
         foreach (var definition in tabsState.Tabs)
         {
-            // 表示名は常に保存ファイル名へ統一します。
-            var normalizedFileName = TabFileNameService.NormalizeFileName(definition.FileName);
+            // 保存識別子を取得し表示名をファイル名へ統一します。
+            var fileIdentifier = definition.FileName;
+            var displayName = Path.GetFileName(fileIdentifier);
             _tabs.Add(new MemoTabViewModel
             {
                 Id = definition.Id,
-                Title = normalizedFileName,
-                FileName = normalizedFileName,
-                Content = _storageService.LoadMemo(normalizedFileName),
+                Title = displayName,
+                FileName = fileIdentifier,
+                Content = _storageService.LoadMemo(fileIdentifier),
                 IsDirty = false
             });
         }
@@ -221,6 +225,7 @@ public sealed class TopMemoController : IDisposable
         _window.EditorTextChanged += HandleEditorTextChanged;
         _window.HideRequested += HideEditorAndSave;
         _window.LinkOpenRequested += HandleLinkOpenRequested;
+        _window.OpenFileDialogRequested += HandleOpenFileDialogRequested;
     }
 
     /// <summary>
@@ -306,6 +311,7 @@ public sealed class TopMemoController : IDisposable
         SaveTabsState();
         _activeTab = tab;
         _window.SelectTab(tab);
+        UpdateCurrentMemoPath();
     }
 
     /// <summary>
@@ -315,7 +321,7 @@ public sealed class TopMemoController : IDisposable
     private void HandleRenameTabRequested(MemoTabViewModel tab)
     {
         // 改名入力ダイアログを表示します。
-        var dialog = new TextInputDialog(tab.FileName)
+        var dialog = new TextInputDialog(tab.Title)
         {
             Owner = _window
         };
@@ -336,16 +342,22 @@ public sealed class TopMemoController : IDisposable
 
         try
         {
-            // ファイル名が変わる場合はファイルも改名します。
-            if (!string.Equals(tab.FileName, newFileName, StringComparison.OrdinalIgnoreCase))
+            // 現在ディレクトリを維持した新しい保存識別子を組み立てます。
+            var newFileIdentifier = Path.IsPathRooted(tab.FileName)
+                ? Path.Combine(Path.GetDirectoryName(tab.FileName) ?? string.Empty, newFileName)
+                : newFileName;
+
+            // 保存識別子が変わる場合はファイルも改名します。
+            if (!string.Equals(tab.FileName, newFileIdentifier, StringComparison.OrdinalIgnoreCase))
             {
-                _storageService.RenameMemo(tab.FileName, newFileName);
-                tab.FileName = newFileName;
+                _storageService.RenameMemo(tab.FileName, newFileIdentifier);
+                tab.FileName = newFileIdentifier;
             }
 
             // タブ表示名をファイル名へ同期します。
             tab.Title = newFileName;
             SaveTabsState();
+            UpdateCurrentMemoPath();
         }
         catch (Exception exception)
         {
@@ -391,6 +403,7 @@ public sealed class TopMemoController : IDisposable
         // 選択タブを復元して状態保存します。
         _activeTab = _tabs[nextIndex];
         _window.SelectTab(_activeTab);
+        UpdateCurrentMemoPath();
         SaveTabsState();
     }
 
@@ -417,6 +430,7 @@ public sealed class TopMemoController : IDisposable
 
         // 新しいタブへ切り替えて状態を保存します。
         _activeTab = tab;
+        UpdateCurrentMemoPath();
         SaveTabsState();
     }
 
@@ -455,6 +469,75 @@ public sealed class TopMemoController : IDisposable
     {
         // リンク遷移を試行します。
         return _linkNavigationService.TryOpenLink(document, offset);
+    }
+
+    /// <summary>
+    /// 開くダイアログ要求を処理します。
+    /// </summary>
+    private void HandleOpenFileDialogRequested()
+    {
+        // 初期表示ディレクトリを現在タブ基準で決定します。
+        var initialDirectory = _filePathService.MemosDirectory;
+        if (_activeTab is not null && Path.IsPathRooted(_activeTab.FileName))
+        {
+            initialDirectory = Path.GetDirectoryName(_activeTab.FileName) ?? _filePathService.MemosDirectory;
+        }
+
+        // 開くダイアログを表示します。
+        var dialog = new Win32OpenFileDialog
+        {
+            Title = "メモを開く",
+            InitialDirectory = initialDirectory,
+            Filter = "Markdown (*.md)|*.md|すべてのファイル (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(_window) != true)
+        {
+            return;
+        }
+
+        // 選択パスを正規化します。
+        var selectedPath = Path.GetFullPath(dialog.FileName);
+        var selectedFileName = Path.GetFileName(selectedPath);
+        if (string.IsNullOrWhiteSpace(selectedFileName))
+        {
+            return;
+        }
+
+        // 切替前に未保存内容を保存します。
+        SaveDirtyTabs();
+
+        // 既存タブがあれば再利用します。
+        var existingTab = _tabs.FirstOrDefault(tab =>
+            string.Equals(Path.GetFullPath(tab.FileName), selectedPath, StringComparison.OrdinalIgnoreCase));
+        if (existingTab is not null)
+        {
+            existingTab.Content = _storageService.LoadMemo(selectedPath);
+            existingTab.IsDirty = false;
+            existingTab.Title = selectedFileName;
+            existingTab.FileName = selectedPath;
+            _activeTab = existingTab;
+            _window.SelectTab(existingTab);
+            UpdateCurrentMemoPath();
+            SaveTabsState();
+            return;
+        }
+
+        // 新規タブとしてファイルを開きます。
+        var openedTab = new MemoTabViewModel
+        {
+            Id = $"tab-{Guid.NewGuid():N}",
+            Title = selectedFileName,
+            FileName = selectedPath,
+            Content = _storageService.LoadMemo(selectedPath),
+            IsDirty = false
+        };
+        _tabs.Add(openedTab);
+        _activeTab = openedTab;
+        _window.SelectTab(openedTab);
+        UpdateCurrentMemoPath();
+        SaveTabsState();
     }
 
     /// <summary>
@@ -570,7 +653,7 @@ public sealed class TopMemoController : IDisposable
             Tabs = _tabs.Select(tab => new TabDefinition
             {
                 Id = tab.Id,
-                Title = tab.FileName,
+                Title = tab.Title,
                 FileName = tab.FileName
             }).ToList()
         };
@@ -590,5 +673,21 @@ public sealed class TopMemoController : IDisposable
         _settings.EditorWindow.Y = y;
         _settings.EditorWindow.Width = width;
         _settings.EditorWindow.Height = height;
+    }
+
+    /// <summary>
+    /// 現在タブのファイルパス表示を更新します。
+    /// </summary>
+    private void UpdateCurrentMemoPath()
+    {
+        // アクティブタブが無い場合は空を表示します。
+        if (_activeTab is null)
+        {
+            _window.SetCurrentMemoPath(string.Empty);
+            return;
+        }
+
+        // 現在タブの保存パスを表示します。
+        _window.SetCurrentMemoPath(_filePathService.GetMemoPath(_activeTab.FileName));
     }
 }

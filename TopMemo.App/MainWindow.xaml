@@ -94,21 +94,42 @@
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
-        <!-- 下部の操作帯を余白なしで配置します。 -->
+        <!-- 下部の操作帯にパス表示と操作ボタンを配置します。 -->
         <Border DockPanel.Dock="Bottom"
                 Background="#F5F5F5"
-                Padding="0"
+                Padding="4"
                 BorderBrush="#E0E0E0"
                 BorderThickness="0,1,0,0">
-            <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Right"
-                           Text="タブ内編集 / 非表示時に保存"
-                           VerticalAlignment="Center"
-                           Foreground="{StaticResource AccentBrush}" />
-                <TextBlock Text="右クリック: 名前変更 / 削除"
-                           VerticalAlignment="Center"
-                           Foreground="#666666" />
-            </DockPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 現在タブのファイルパスを表示します。 -->
+                <TextBox Name="CurrentPathTextBox"
+                         Grid.Column="0"
+                         IsReadOnly="True"
+                         VerticalContentAlignment="Center"
+                         Margin="0,0,6,0"
+                         HorizontalScrollBarVisibility="Auto" />
+
+                <!-- 現在パスのファイルを開きます。 -->
+                <Button Grid.Column="1"
+                        Content="開く"
+                        Width="72"
+                        Margin="0,0,6,0"
+                        Style="{StaticResource DisabledButtonStyle}"
+                        Click="OpenPathButton_Click" />
+
+                <!-- 新規タブを追加します。 -->
+                <Button Grid.Column="2"
+                        Content="追加"
+                        Width="72"
+                        Style="{StaticResource DisabledButtonStyle}"
+                        Click="AddTabButton_Click" />
+            </Grid>
         </Border>
 
         <!-- メイン領域を余白なしで配置します。 -->
@@ -156,17 +177,6 @@
                     </DataTemplate>
                 </TabControl.ContentTemplate>
             </TabControl>
-
-            <!-- 新規タブ追加ボタンを入力エリア上部へ重ねて配置します。 -->
-            <Button Content="+"
-                    Width="34"
-                    Height="30"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Margin="0"
-                    Panel.ZIndex="10"
-                    Style="{StaticResource DisabledButtonStyle}"
-                    Click="AddTabButton_Click" />
         </Grid>
     </DockPanel>
 </Window>

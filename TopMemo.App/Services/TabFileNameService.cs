@@ -38,7 +38,7 @@ public sealed class TabFileNameService
         while (true)
         {
             var candidate = index == 1 ? $"{baseName}.md" : $"{baseName} ({index}).md";
-            var isUsedByTabs = existingTabs.Any(tab => string.Equals(tab.FileName, candidate, StringComparison.OrdinalIgnoreCase));
+            var isUsedByTabs = existingTabs.Any(tab => string.Equals(Path.GetFileName(tab.FileName), candidate, StringComparison.OrdinalIgnoreCase));
 
             // タブ利用中でなくファイルも未存在なら確定します。
             if (!isUsedByTabs && !_jsonStorageService.MemoExists(candidate))
@@ -98,6 +98,6 @@ public sealed class TabFileNameService
         // 同一タブを除外して重複名を判定します。
         return existingTabs.Any(tab =>
             !string.Equals(tab.Id, ignoreTabId, StringComparison.Ordinal) &&
-            string.Equals(tab.FileName, fileName, StringComparison.OrdinalIgnoreCase));
+            string.Equals(Path.GetFileName(tab.FileName), fileName, StringComparison.OrdinalIgnoreCase));
     }
 }

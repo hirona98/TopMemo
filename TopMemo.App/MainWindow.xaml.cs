@@ -80,6 +80,11 @@ public partial class MainWindow : Window
     public event Func<TextDocument, int, bool>? LinkOpenRequested;
 
     /// <summary>
+    /// 開くダイアログ表示要求イベントです。
+    /// </summary>
+    public event Action? OpenFileDialogRequested;
+
+    /// <summary>
     /// 現在選択中のタブを取得します。
     /// </summary>
     public MemoTabViewModel? SelectedTab => MemoTabControl.SelectedItem as MemoTabViewModel;
@@ -97,6 +102,17 @@ public partial class MainWindow : Window
     {
         // ItemsSource へタブ一覧を設定します。
         MemoTabControl.ItemsSource = tabs;
+    }
+
+    /// <summary>
+    /// 画面下部のファイルパス表示を更新します。
+    /// </summary>
+    /// <param name="memoPath">表示対象パス。</param>
+    public void SetCurrentMemoPath(string memoPath)
+    {
+        // パス表示へ最新値を反映します。
+        CurrentPathTextBox.Text = memoPath;
+        CurrentPathTextBox.ToolTip = memoPath;
     }
 
     /// <summary>
@@ -218,6 +234,17 @@ public partial class MainWindow : Window
     {
         // 新規タブ追加を要求します。
         AddTabRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// 開くボタンクリック処理です。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void OpenPathButton_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        // 開くダイアログの表示を要求します。
+        OpenFileDialogRequested?.Invoke();
     }
 
     /// <summary>

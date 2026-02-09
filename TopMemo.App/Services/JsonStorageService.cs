@@ -144,7 +144,7 @@ public sealed class JsonStorageService
     {
         // ファイルが無ければ空で作成して返します。
         EnsureMemoFileExists(fileName);
-        return File.ReadAllText(_filePathService.GetMemoPath(fileName), Encoding.UTF8);
+        return File.ReadAllText(ResolveMemoPath(fileName), Encoding.UTF8);
     }
 
     /// <summary>
@@ -155,7 +155,14 @@ public sealed class JsonStorageService
     public void SaveMemo(string fileName, string content)
     {
         // 本文を UTF-8 で上書き保存します。
-        File.WriteAllText(_filePathService.GetMemoPath(fileName), content, Encoding.UTF8);
+        var path = ResolveMemoPath(fileName);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(path, content, Encoding.UTF8);
     }
 
     /// <summary>
@@ -175,7 +182,15 @@ public sealed class JsonStorageService
         }
 
         // 旧ファイルを新名へ移動します。
-        File.Move(_filePathService.GetMemoPath(oldFileName), _filePathService.GetMemoPath(newFileName), overwrite: false);
+        var sourcePath = ResolveMemoPath(oldFileName);
+        var destinationPath = ResolveMemoPath(newFileName);
+        var destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrWhiteSpace(destinationDirectory))
+        {
+            Directory.CreateDirectory(destinationDirectory);
+        }
+
+        File.Move(sourcePath, destinationPath, overwrite: false);
     }
 
     /// <summary>
@@ -185,7 +200,7 @@ public sealed class JsonStorageService
     public void DeleteMemo(string fileName)
     {
         // 対象ファイルがあれば削除します。
-        var path = _filePathService.GetMemoPath(fileName);
+        var path = ResolveMemoPath(fileName);
         if (File.Exists(path))
         {
             File.Delete(path);
@@ -200,7 +215,7 @@ public sealed class JsonStorageService
     public bool MemoExists(string fileName)
     {
         // 保存先の存在確認を返します。
-        return File.Exists(_filePathService.GetMemoPath(fileName));
+        return File.Exists(ResolveMemoPath(fileName));
     }
 
     /// <summary>
@@ -210,11 +225,34 @@ public sealed class JsonStorageService
     private void EnsureMemoFileExists(string fileName)
     {
         // ファイルが無い時だけ空で作成します。
-        var path = _filePathService.GetMemoPath(fileName);
+        var path = ResolveMemoPath(fileName);
         if (!File.Exists(path))
         {
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
             File.WriteAllText(path, string.Empty, Encoding.UTF8);
         }
+    }
+
+    /// <summary>
+    /// ファイル識別子から実ファイルパスを解決します。
+    /// </summary>
+    /// <param name="fileName">ファイル名または絶対パス。</param>
+    /// <returns>解決済みフルパス。</returns>
+    private string ResolveMemoPath(string fileName)
+    {
+        // 絶対パスはそのまま使います。
+        if (Path.IsPathRooted(fileName))
+        {
+            return Path.GetFullPath(fileName);
+        }
+
+        // 相対名は memos 配下へ解決します。
+        return _filePathService.GetMemoPath(fileName);
     }
 
     /// <summary>
@@ -286,4 +324,3 @@ public sealed class JsonStorageService
         return tabsState.Tabs.Any(tab => tab.Id == tabsState.ActiveTabId);
     }
 }
-

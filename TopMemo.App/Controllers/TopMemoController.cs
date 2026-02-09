@@ -219,6 +219,7 @@ public sealed class TopMemoController : IDisposable
         _window.RenameTabRequested += HandleRenameTabRequested;
         _window.DeleteTabRequested += HandleDeleteTabRequested;
         _window.DeleteFileRequested += HandleDeleteFileRequested;
+        _window.TabOrderChanged += HandleTabOrderChanged;
 
         // 編集と表示制御イベントを接続します。
         _window.SelectedTabChanged += HandleSelectedTabChanged;
@@ -490,6 +491,15 @@ public sealed class TopMemoController : IDisposable
         // 新しいタブへ切り替えて状態を保存します。
         _activeTab = tab;
         UpdateCurrentMemoPath();
+        SaveTabsState();
+    }
+
+    /// <summary>
+    /// タブ順序変更イベントを処理します。
+    /// </summary>
+    private void HandleTabOrderChanged()
+    {
+        // 並び順変更を即時保存します。
         SaveTabsState();
     }
 

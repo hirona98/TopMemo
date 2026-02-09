@@ -22,6 +22,9 @@ public partial class MainWindow : Window
     private bool _suppressEditorTextChanged;
     private bool _suppressTabSelectionChanged;
     private bool _allowClose;
+    private bool _isTabDragInProgress;
+    private System.Windows.Point _tabDragStartPoint;
+    private MemoTabViewModel? _dragSourceTab;
     private MemoTabViewModel? _contextMenuTargetTab;
     private readonly ContextMenu _tabContextMenu = new();
     private readonly ContextMenu _tabRowContextMenu = new();
@@ -66,6 +69,11 @@ public partial class MainWindow : Window
     /// タブ切替イベントです。
     /// </summary>
     public event Action<MemoTabViewModel?>? SelectedTabChanged;
+
+    /// <summary>
+    /// タブ並び順変更イベントです。
+    /// </summary>
+    public event Action? TabOrderChanged;
 
     /// <summary>
     /// エディタ本文変更イベントです。
@@ -355,6 +363,166 @@ public partial class MainWindow : Window
         // 選択変更してホイールイベントを消費します。
         MemoTabControl.SelectedIndex = nextIndex;
         eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// タブドラッグ開始位置を記録します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoTabControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
+    {
+        // クリック位置を保持し、ドラッグ元タブを特定します。
+        _tabDragStartPoint = eventArgs.GetPosition(MemoTabControl);
+        _dragSourceTab = null;
+
+        // クリック元が無い場合は処理しません。
+        if (eventArgs.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
+        // タブヘッダ上クリック時のみドラッグ元を記録します。
+        var sourceTabItem = FindAncestor<TabItem>(source);
+        if (sourceTabItem?.DataContext is MemoTabViewModel sourceTab)
+        {
+            _dragSourceTab = sourceTab;
+        }
+    }
+
+    /// <summary>
+    /// タブドラッグを開始します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoTabControl_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs eventArgs)
+    {
+        // 左ボタン押下中かつドラッグ元タブがある場合のみ処理します。
+        if (eventArgs.LeftButton != MouseButtonState.Pressed || _dragSourceTab is null || _isTabDragInProgress)
+        {
+            return;
+        }
+
+        // 閾値未満の移動はドラッグ開始しません。
+        var currentPoint = eventArgs.GetPosition(MemoTabControl);
+        var horizontalDistance = Math.Abs(currentPoint.X - _tabDragStartPoint.X);
+        var verticalDistance = Math.Abs(currentPoint.Y - _tabDragStartPoint.Y);
+        if (horizontalDistance < SystemParameters.MinimumHorizontalDragDistance &&
+            verticalDistance < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        // ドラッグ&ドロップを開始します。
+        _isTabDragInProgress = true;
+        try
+        {
+            var dragData = new System.Windows.DataObject(typeof(MemoTabViewModel), _dragSourceTab);
+            System.Windows.DragDrop.DoDragDrop(MemoTabControl, dragData, System.Windows.DragDropEffects.Move);
+        }
+        finally
+        {
+            _isTabDragInProgress = false;
+            _dragSourceTab = null;
+        }
+    }
+
+    /// <summary>
+    /// タブドロップ可否を判定します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoTabControl_DragOver(object sender, System.Windows.DragEventArgs eventArgs)
+    {
+        // タブデータ以外のドロップは拒否します。
+        if (!eventArgs.Data.GetDataPresent(typeof(MemoTabViewModel)))
+        {
+            eventArgs.Effects = System.Windows.DragDropEffects.None;
+            eventArgs.Handled = true;
+            return;
+        }
+
+        // タブデータのドロップは Move として受理します。
+        eventArgs.Effects = System.Windows.DragDropEffects.Move;
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// タブドロップ時に並び順を更新します。
+    /// </summary>
+    /// <param name="sender">送信元。</param>
+    /// <param name="eventArgs">イベント引数。</param>
+    private void MemoTabControl_Drop(object sender, System.Windows.DragEventArgs eventArgs)
+    {
+        // タブデータが無い場合は処理しません。
+        if (!eventArgs.Data.GetDataPresent(typeof(MemoTabViewModel)))
+        {
+            return;
+        }
+
+        // ドラッグ元タブを解決します。
+        if (eventArgs.Data.GetData(typeof(MemoTabViewModel)) is not MemoTabViewModel sourceTab)
+        {
+            return;
+        }
+
+        // ItemsSource がタブ一覧でない場合は処理しません。
+        if (MemoTabControl.ItemsSource is not ObservableCollection<MemoTabViewModel> tabs)
+        {
+            return;
+        }
+
+        // ドロップ先インデックスを計算します。
+        var sourceIndex = tabs.IndexOf(sourceTab);
+        if (sourceIndex < 0)
+        {
+            return;
+        }
+
+        var targetIndex = ResolveDropTargetIndex(eventArgs.OriginalSource as DependencyObject, tabs);
+        if (targetIndex < 0 || targetIndex == sourceIndex)
+        {
+            return;
+        }
+
+        // タブを移動し、移動後タブを選択します。
+        tabs.Move(sourceIndex, targetIndex);
+        MemoTabControl.SelectedItem = sourceTab;
+
+        // 並び順変更を外部へ通知します。
+        TabOrderChanged?.Invoke();
+        eventArgs.Handled = true;
+    }
+
+    /// <summary>
+    /// ドロップ先インデックスを解決します。
+    /// </summary>
+    /// <param name="source">ドロップ元要素。</param>
+    /// <param name="tabs">タブ一覧。</param>
+    /// <returns>インデックス。無効時は -1。</returns>
+    private int ResolveDropTargetIndex(DependencyObject? source, ObservableCollection<MemoTabViewModel> tabs)
+    {
+        // 要素が無い場合は無効値を返します。
+        if (source is null)
+        {
+            return -1;
+        }
+
+        // タブ上ドロップならそのタブ位置へ移動します。
+        var targetTabItem = FindAncestor<TabItem>(source);
+        if (targetTabItem?.DataContext is MemoTabViewModel targetTab)
+        {
+            return tabs.IndexOf(targetTab);
+        }
+
+        // タブ行上ドロップなら末尾へ移動します。
+        var targetTabPanel = FindAncestor<TabPanel>(source);
+        if (targetTabPanel is not null)
+        {
+            return tabs.Count - 1;
+        }
+
+        return -1;
     }
 
     /// <summary>

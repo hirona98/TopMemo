@@ -122,7 +122,12 @@
                         Background="White"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"
+                        AllowDrop="True"
                         SelectionChanged="MemoTabControl_SelectionChanged"
+                        PreviewMouseLeftButtonDown="MemoTabControl_PreviewMouseLeftButtonDown"
+                        PreviewMouseMove="MemoTabControl_PreviewMouseMove"
+                        DragOver="MemoTabControl_DragOver"
+                        Drop="MemoTabControl_Drop"
                         PreviewMouseRightButtonDown="MemoTabControl_PreviewMouseRightButtonDown"
                         PreviewMouseWheel="MemoTabControl_PreviewMouseWheel"
                         Margin="0">

@@ -342,6 +342,12 @@ public partial class MainWindow : Window
     /// <param name="eventArgs">イベント引数。</param>
     private void MemoTabControl_PreviewMouseWheel(object sender, MouseWheelEventArgs eventArgs)
     {
+        // タブヘッダ上以外のホイールは無視します。
+        if (eventArgs.OriginalSource is not DependencyObject source || FindAncestor<TabItem>(source) is null)
+        {
+            return;
+        }
+
         // タブ数が 2 未満なら切り替え不要です。
         if (MemoTabControl.Items.Count < 2 || SelectedTab is null)
         {

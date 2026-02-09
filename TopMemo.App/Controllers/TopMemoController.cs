@@ -527,17 +527,39 @@ public sealed class TopMemoController : IDisposable
         // 既定フォントより 1 段階大きいサイズを適用します。
         textEditor.FontSize = System.Windows.SystemFonts.MessageFontSize + 1.0;
 
+        // 行番号領域の右側に余白を追加します。
+        ApplyLineNumberMargin(textEditor);
+
         // 行間は既定相当に 1px 加算してわずかに広げます。
         var baseLineHeight = textEditor.FontSize * textEditor.FontFamily.LineSpacing;
         textEditor.TextArea.TextView.SetValue(
             System.Windows.Documents.Block.LineHeightProperty,
-            baseLineHeight + 1.0);
+            baseLineHeight + 1.5);
         textEditor.TextArea.TextView.SetValue(
             System.Windows.Documents.Block.LineStackingStrategyProperty,
             System.Windows.LineStackingStrategy.BlockLineHeight);
 
         // Markdown 色付けを適用します。
         _markdownHighlightService.Apply(textEditor);
+    }
+
+    /// <summary>
+    /// 行番号領域の余白を設定します。
+    /// </summary>
+    /// <param name="textEditor">対象エディタ。</param>
+    private static void ApplyLineNumberMargin(TextEditor textEditor)
+    {
+        // 行番号マージン要素を取得します。
+        var lineNumberMargin = textEditor.TextArea.LeftMargins
+            .OfType<System.Windows.FrameworkElement>()
+            .FirstOrDefault(margin => string.Equals(margin.GetType().Name, "LineNumberMargin", StringComparison.Ordinal));
+        if (lineNumberMargin is null)
+        {
+            return;
+        }
+
+        // 右側余白だけを追加し、桁幅は自動調整のままにします。
+        lineNumberMargin.Margin = new System.Windows.Thickness(0, 0, 6, 0);
     }
 
     /// <summary>

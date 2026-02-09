@@ -258,28 +258,6 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 追加ボタンクリック処理です。
-    /// </summary>
-    /// <param name="sender">送信元。</param>
-    /// <param name="eventArgs">イベント引数。</param>
-    private void AddTabButton_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        // 新規タブ追加を要求します。
-        AddTabRequested?.Invoke();
-    }
-
-    /// <summary>
-    /// 開くボタンクリック処理です。
-    /// </summary>
-    /// <param name="sender">送信元。</param>
-    /// <param name="eventArgs">イベント引数。</param>
-    private void OpenPathButton_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        // 開くダイアログの表示を要求します。
-        OpenFileDialogRequested?.Invoke();
-    }
-
-    /// <summary>
     /// タブ選択変更イベント処理です。
     /// </summary>
     /// <param name="sender">送信元。</param>

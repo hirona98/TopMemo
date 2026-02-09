@@ -17,80 +17,36 @@
     <Window.Resources>
         <!-- アクセント色を定義します。 -->
         <SolidColorBrush x:Key="AccentBrush"
-                         Color="#4873CF" />
+                         Color="#4873CF"/>
 
         <!-- タブ見た目を SettingWindow 風に揃えます。 -->
         <Style x:Key="AdminTabItemStyle"
                TargetType="TabItem">
             <Setter Property="Background"
-                    Value="#F0F0F0" />
+                    Value="#F0F0F0"/>
             <Setter Property="BorderThickness"
-                    Value="0" />
+                    Value="0"/>
             <Setter Property="Padding"
-                    Value="15,10" />
+                    Value="15,10"/>
             <Setter Property="Foreground"
-                    Value="#666666" />
+                    Value="#666666"/>
             <Setter Property="Margin"
-                    Value="0" />
+                    Value="0"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected"
                          Value="True">
                     <Setter Property="Background"
-                            Value="White" />
+                            Value="White"/>
                     <Setter Property="Foreground"
-                            Value="{StaticResource AccentBrush}" />
+                            Value="{StaticResource AccentBrush}"/>
                     <Setter Property="BorderThickness"
-                            Value="0,0,0,3" />
+                            Value="0,0,0,3"/>
                     <Setter Property="BorderBrush"
-                            Value="{StaticResource AccentBrush}" />
+                            Value="{StaticResource AccentBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
-        <!-- ボタン見た目を SettingWindow 風に揃えます。 -->
-        <Style x:Key="DisabledButtonStyle"
-               TargetType="Button">
-            <Setter Property="Background"
-                    Value="#4873CF" />
-            <Setter Property="Foreground"
-                    Value="WhiteSmoke" />
-            <Setter Property="BorderThickness"
-                    Value="0" />
-            <Setter Property="Padding"
-                    Value="10,5" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsEnabled"
-                                     Value="False">
-                                <Setter Property="Background"
-                                        Value="#CCCCCC" />
-                                <Setter Property="Foreground"
-                                        Value="#888888" />
-                            </Trigger>
-                            <Trigger Property="IsMouseOver"
-                                     Value="True">
-                                <Setter Property="Background"
-                                        Value="#5A84D9" />
-                            </Trigger>
-                            <Trigger Property="IsPressed"
-                                     Value="True">
-                                <Setter Property="Background"
-                                        Value="#3A62B8" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
@@ -101,7 +57,7 @@
                    BorderThickness="0,1,0,0">
             <StatusBarItem HorizontalContentAlignment="Stretch">
                 <TextBlock Name="CurrentPathTextBlock"
-                           TextTrimming="CharacterEllipsis" />
+                           TextTrimming="CharacterEllipsis"/>
             </StatusBarItem>
         </StatusBar>
 
@@ -124,14 +80,14 @@
                         Margin="0">
                 <TabControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type viewModels:MemoTabViewModel}">
-                        <TextBlock Text="{Binding Title}" />
+                        <TextBlock Text="{Binding Title}"/>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem"
                            BasedOn="{StaticResource AdminTabItemStyle}">
                         <EventSetter Event="PreviewMouseRightButtonDown"
-                                     Handler="TabItem_PreviewMouseRightButtonDown" />
+                                     Handler="TabItem_PreviewMouseRightButtonDown"/>
                     </Style>
                 </TabControl.ItemContainerStyle>
                 <TabControl.ContentTemplate>
@@ -155,7 +111,7 @@
                                                    PreviewMouseMove="MemoEditor_PreviewMouseMove"
                                                    PreviewMouseRightButtonUp="MemoEditor_PreviewMouseRightButtonUp"
                                                    LostMouseCapture="MemoEditor_LostMouseCapture"
-                                                   PreviewMouseLeftButtonUp="MemoEditor_PreviewMouseLeftButtonUp" />
+                                                   PreviewMouseLeftButtonUp="MemoEditor_PreviewMouseLeftButtonUp"/>
                         </Border>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
@@ -174,12 +130,12 @@
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Visibility"
-                                Value="Visible" />
+                                Value="Visible"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding ElementName=MemoTabControl, Path=HasItems}"
                                          Value="True">
                                 <Setter Property="Visibility"
-                                        Value="Collapsed" />
+                                        Value="Collapsed"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -187,19 +143,19 @@
                 <StackPanel>
                     <TextBlock Foreground="#1F2A44"
                                FontWeight="SemiBold"
-                               Text="タブがありません（最初に1つ作成してください）" />
+                               Text="タブがありません（最初に1つ作成してください）"/>
                     <TextBlock Margin="0,6,0,0"
                                Foreground="#4A5568"
-                               Text="1. タブ行を右クリックします。" />
+                               Text="1. タブ行を右クリックします。"/>
                     <TextBlock Margin="0,2,0,0"
                                Foreground="#4A5568"
-                               Text="2. 「ファイルの作成」で新規メモを作るか、「ファイルを開く」で既存メモを開きます。" />
+                               Text="2. 「ファイルの作成」で新規メモを作るか、「ファイルを開く」で既存メモを開きます。"/>
                     <TextBlock Margin="0,2,0,0"
                                Foreground="#4A5568"
-                               Text="3. タブを右クリックすると「名前変更」「タブを閉じる」「ファイルを削除」が使えます。" />
+                               Text="3. タブを右クリックすると「名前変更」「タブを閉じる」「ファイルを削除」が使えます。"/>
                     <TextBlock Margin="0,2,0,0"
                                Foreground="#4A5568"
-                               Text="4. トレイアイコン右クリックで「表示/非表示」「自動起動」「終了」を操作できます。" />
+                               Text="4. トレイアイコン右クリックで「表示/非表示」「自動起動」「終了」を操作できます。"/>
                 </StackPanel>
             </Border>
         </Grid>

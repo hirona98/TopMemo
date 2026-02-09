@@ -55,6 +55,11 @@ public partial class MainWindow : Window
     public event Action<MemoTabViewModel>? DeleteTabRequested;
 
     /// <summary>
+    /// ファイル削除要求イベントです。
+    /// </summary>
+    public event Action<MemoTabViewModel>? DeleteFileRequested;
+
+    /// <summary>
     /// タブ切替イベントです。
     /// </summary>
     public event Action<MemoTabViewModel?>? SelectedTabChanged;
@@ -330,9 +335,9 @@ public partial class MainWindow : Window
             }
         };
 
-        // 「削除」メニューを作成します。
-        var deleteItem = new MenuItem { Header = "削除" };
-        deleteItem.Click += (_, _) =>
+        // 「タブを削除」メニューを作成します。
+        var deleteTabItem = new MenuItem { Header = "タブを削除" };
+        deleteTabItem.Click += (_, _) =>
         {
             if (_contextMenuTargetTab is not null)
             {
@@ -340,9 +345,20 @@ public partial class MainWindow : Window
             }
         };
 
+        // 「ファイルを削除」メニューを作成します。
+        var deleteFileItem = new MenuItem { Header = "ファイルを削除" };
+        deleteFileItem.Click += (_, _) =>
+        {
+            if (_contextMenuTargetTab is not null)
+            {
+                DeleteFileRequested?.Invoke(_contextMenuTargetTab);
+            }
+        };
+
         // メニューへ項目を追加します。
         _tabContextMenu.Items.Add(renameItem);
-        _tabContextMenu.Items.Add(deleteItem);
+        _tabContextMenu.Items.Add(deleteTabItem);
+        _tabContextMenu.Items.Add(deleteFileItem);
     }
 
     /// <summary>

@@ -218,6 +218,7 @@ public sealed class TopMemoController : IDisposable
         _window.AddTabRequested += HandleAddTabRequested;
         _window.RenameTabRequested += HandleRenameTabRequested;
         _window.DeleteTabRequested += HandleDeleteTabRequested;
+        _window.DeleteFileRequested += HandleDeleteFileRequested;
 
         // 編集と表示制御イベントを接続します。
         _window.SelectedTabChanged += HandleSelectedTabChanged;
@@ -374,37 +375,52 @@ public sealed class TopMemoController : IDisposable
     private void HandleDeleteTabRequested(MemoTabViewModel tab)
     {
         // 最低 1 タブ維持ルールを適用します。
-        if (_tabs.Count <= 1)
+        if (!CanDeleteTab())
         {
-            WpfMessageBox.Show(_window, "最後の1タブは削除できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
             return;
         }
 
-        // 削除確認を表示します。
+        // 変更を退避してタブのみ削除します。
+        SaveDirtyTabs();
+        RemoveTab(tab);
+    }
+
+    /// <summary>
+    /// ファイル削除要求を処理します。
+    /// </summary>
+    /// <param name="tab">対象タブ。</param>
+    private void HandleDeleteFileRequested(MemoTabViewModel tab)
+    {
+        // 最低 1 タブ維持ルールを適用します。
+        if (!CanDeleteTab())
+        {
+            return;
+        }
+
+        // ファイル削除確認を表示します。
         var confirmation = WpfMessageBox.Show(
             _window,
-            $"タブ \"{tab.Title}\" を削除しますか？",
+            $"ファイル \"{tab.FileName}\" を削除しますか？\nこの操作は元に戻せません。",
             "TopMemo",
             WpfMessageBoxButton.YesNo,
-            WpfMessageBoxImage.Question);
+            WpfMessageBoxImage.Warning);
         if (confirmation != WpfMessageBoxResult.Yes)
         {
             return;
         }
 
-        // 削除後に選ぶタブを決定します。
-        var index = _tabs.IndexOf(tab);
-        var nextIndex = Math.Max(0, index - 1);
-
-        // タブ定義と保存ファイルを削除します。
-        _tabs.Remove(tab);
-        _storageService.DeleteMemo(tab.FileName);
-
-        // 選択タブを復元して状態保存します。
-        _activeTab = _tabs[nextIndex];
-        _window.SelectTab(_activeTab);
-        UpdateCurrentMemoPath();
-        SaveTabsState();
+        try
+        {
+            // 先に実ファイルを削除してからタブを削除します。
+            _storageService.DeleteMemo(tab.FileName);
+            RemoveTab(tab);
+        }
+        catch (Exception exception)
+        {
+            // 削除失敗を通知します。
+            _loggingService.Error($"ファイル削除に失敗しました。file={tab.FileName}", exception);
+            WpfMessageBox.Show(_window, "ファイル削除に失敗しました。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
+        }
     }
 
     /// <summary>
@@ -510,17 +526,11 @@ public sealed class TopMemoController : IDisposable
 
         // 既存タブがあれば再利用します。
         var existingTab = _tabs.FirstOrDefault(tab =>
-            string.Equals(Path.GetFullPath(tab.FileName), selectedPath, StringComparison.OrdinalIgnoreCase));
+            string.Equals(ResolveTabFilePath(tab.FileName), selectedPath, StringComparison.OrdinalIgnoreCase));
         if (existingTab is not null)
         {
-            existingTab.Content = _storageService.LoadMemo(selectedPath);
-            existingTab.IsDirty = false;
-            existingTab.Title = selectedFileName;
-            existingTab.FileName = selectedPath;
-            _activeTab = existingTab;
-            _window.SelectTab(existingTab);
-            UpdateCurrentMemoPath();
-            SaveTabsState();
+            // 同一ファイルの重複オープンを禁止します。
+            WpfMessageBox.Show(_window, "同じファイルは既に開いています。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
             return;
         }
 
@@ -688,6 +698,71 @@ public sealed class TopMemoController : IDisposable
         }
 
         // 現在タブの保存パスを表示します。
-        _window.SetCurrentMemoPath(_filePathService.GetMemoPath(_activeTab.FileName));
+        _window.SetCurrentMemoPath(ResolveTabFilePath(_activeTab.FileName));
+    }
+
+    /// <summary>
+    /// タブ保存識別子を比較用の絶対パスへ正規化します。
+    /// </summary>
+    /// <param name="fileIdentifier">保存識別子。</param>
+    /// <returns>絶対パス。</returns>
+    private string ResolveTabFilePath(string fileIdentifier)
+    {
+        // 絶対パスはそのまま正規化します。
+        if (Path.IsPathRooted(fileIdentifier))
+        {
+            return Path.GetFullPath(fileIdentifier);
+        }
+
+        // 相対名は memos 配下へ解決します。
+        return Path.GetFullPath(_filePathService.GetMemoPath(fileIdentifier));
+    }
+
+    /// <summary>
+    /// タブ削除可能かを判定します。
+    /// </summary>
+    /// <returns>削除可能なら true。</returns>
+    private bool CanDeleteTab()
+    {
+        // 最低 1 タブ維持ルールを適用します。
+        if (_tabs.Count > 1)
+        {
+            return true;
+        }
+
+        WpfMessageBox.Show(_window, "最後の1タブは削除できません。", "TopMemo", WpfMessageBoxButton.OK, WpfMessageBoxImage.Information);
+        return false;
+    }
+
+    /// <summary>
+    /// タブのみを削除して選択状態を整えます。
+    /// </summary>
+    /// <param name="tab">削除対象タブ。</param>
+    private void RemoveTab(MemoTabViewModel tab)
+    {
+        // 対象タブが一覧に無い場合は処理しません。
+        var index = _tabs.IndexOf(tab);
+        if (index < 0)
+        {
+            return;
+        }
+
+        // アクティブタブ削除かを保持します。
+        var deletingActive = _activeTab?.Id == tab.Id;
+
+        // タブ一覧から削除します。
+        _tabs.RemoveAt(index);
+
+        // アクティブ削除時は近傍タブを選択します。
+        if (deletingActive)
+        {
+            var nextIndex = Math.Min(index, _tabs.Count - 1);
+            _activeTab = _tabs[nextIndex];
+            _window.SelectTab(_activeTab);
+        }
+
+        // 表示更新と永続化を実行します。
+        UpdateCurrentMemoPath();
+        SaveTabsState();
     }
 }

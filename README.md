@@ -35,6 +35,20 @@ WSL では PowerShell 経由でビルドします。
 powershell.exe -NoProfile -Command "cd 'D:\AliceEncoder\TopMemo'; dotnet.exe build .\TopMemo.sln -c Debug"
 ```
 
+## 自動リリース
+
+- `.github/workflows/release.yml` により `v*` タグ push で自動リリースします
+- 生成物: `TopMemo-<tag>-win-x64.zip`
+
+手順:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+※ Release 作成に失敗する場合は、GitHub の `Settings > Actions > General > Workflow permissions` を `Read and write permissions` にしてください。
+
 ## 詳細設計
 
 `docs/hover-notepad-design.md` を参照してください。

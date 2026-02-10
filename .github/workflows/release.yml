@@ -1,0 +1,66 @@
+name: release
+
+# リリースタグ push をトリガーに実行します。
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Release 作成に必要な権限を付与します。
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Windows 向けバイナリを生成するため Windows ランナーを使用します。
+    runs-on: windows-latest
+
+    steps:
+      # リポジトリを取得します。
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # .NET 8 SDK をセットアップします。
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # タグ名をバージョンとして保持します。
+      - name: Resolve Version
+        id: version
+        shell: pwsh
+        run: |
+          "version=$env:GITHUB_REF_NAME" >> $env:GITHUB_OUTPUT
+
+      # 依存関係を復元します。
+      - name: Restore
+        run: dotnet restore TopMemo.sln
+
+      # 単一ファイルの自己完結版を publish します。
+      - name: Publish
+        run: >-
+          dotnet publish TopMemo.App/TopMemo.App.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish/win-x64
+
+      # 配布用 zip を作成します。
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $zipName = "TopMemo-${{ steps.version.outputs.version }}-win-x64.zip"
+          Compress-Archive -Path "publish/win-x64/*" -DestinationPath "dist/$zipName" -Force
+
+      # GitHub Release を自動作成し、zip を添付します。
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: TopMemo ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: dist/*.zip

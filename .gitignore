@@ -1,6 +1,7 @@
 # Build artifacts
 **/bin/
 **/obj/
+**/publish/
 
 # IDE files
 .vs/

@@ -17,6 +17,8 @@ public sealed class JsonStorageService
 
     private readonly FilePathService _filePathService;
     private readonly LoggingService _loggingService;
+    private static readonly Encoding Utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly Encoding ShiftJisEncoding = Encoding.GetEncoding(932);
 
     /// <summary>
     /// 初期化します。
@@ -25,6 +27,9 @@ public sealed class JsonStorageService
     /// <param name="loggingService">ログサービス。</param>
     public JsonStorageService(FilePathService filePathService, LoggingService loggingService)
     {
+        // 非 Unicode 系のコードページを利用できるようにします。
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
         // 依存関係を保持します。
         _filePathService = filePathService;
         _loggingService = loggingService;
@@ -142,7 +147,28 @@ public sealed class JsonStorageService
     {
         // ファイルが無ければ空で作成して返します。
         EnsureMemoFileExists(fileName);
-        return File.ReadAllText(ResolveMemoPath(fileName), Encoding.UTF8);
+        return ReadTextWithEncodingDetection(ResolveMemoPath(fileName));
+    }
+
+    /// <summary>
+    /// テキストファイルを文字コード自動判定で読み込みます。
+    /// </summary>
+    /// <param name="path">対象ファイルのフルパス。</param>
+    /// <returns>読み込んだ本文。</returns>
+    private static string ReadTextWithEncodingDetection(string path)
+    {
+        try
+        {
+            // BOM を優先しつつ、BOM なしは厳密 UTF-8 として読み込みます。
+            using var utf8Reader = new StreamReader(path, Utf8Strict, detectEncodingFromByteOrderMarks: true);
+            return utf8Reader.ReadToEnd();
+        }
+        catch (DecoderFallbackException)
+        {
+            // UTF-8 として不正な場合は Shift_JIS(CP932) で再読込します。
+            using var shiftJisReader = new StreamReader(path, ShiftJisEncoding, detectEncodingFromByteOrderMarks: true);
+            return shiftJisReader.ReadToEnd();
+        }
     }
 
     /// <summary>

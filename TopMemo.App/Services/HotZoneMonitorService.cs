@@ -12,6 +12,7 @@ namespace TopMemo.App.Services;
 internal sealed class HotZoneMonitorService : IDisposable
 {
     private static readonly TimeSpan HideDelay = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan AutoHideIfNotHoveredDelay = TimeSpan.FromSeconds(2);
     private readonly DispatcherTimer _timer;
     private readonly Func<bool> _isEditorVisible;
     private readonly Func<NativeRect?> _getEditorRect;
@@ -21,6 +22,7 @@ internal sealed class HotZoneMonitorService : IDisposable
     private bool _hasEnteredEditorSinceShown;
     private bool _hasRaisedEditorExited;
     private DateTime? _outsideEditorSinceUtc;
+    private DateTime? _editorShownAtUtc;
     private DateTime _taskViewReadyAtUtc = DateTime.MinValue;
 
     /// <summary>
@@ -120,6 +122,9 @@ internal sealed class HotZoneMonitorService : IDisposable
         // エディタ表示中は領域外移動を監視します。
         if (_isEditorVisible())
         {
+            // 表示開始時刻を初回のみ記録します。
+            _editorShownAtUtc ??= DateTime.UtcNow;
+
             var rect = _getEditorRect();
             if (rect is not null)
             {
@@ -155,6 +160,17 @@ internal sealed class HotZoneMonitorService : IDisposable
                     }
                 }
             }
+
+            // 一度もエディタへ入っていない場合は 2 秒で自動非表示します。
+            if (!_hasEnteredEditorSinceShown && !_hasRaisedEditorExited && _editorShownAtUtc is not null)
+            {
+                var elapsedSinceShown = DateTime.UtcNow - _editorShownAtUtc.Value;
+                if (elapsedSinceShown >= AutoHideIfNotHoveredDelay)
+                {
+                    EditorExited?.Invoke();
+                    _hasRaisedEditorExited = true;
+                }
+            }
         }
         else
         {
@@ -162,6 +178,7 @@ internal sealed class HotZoneMonitorService : IDisposable
             _hasEnteredEditorSinceShown = false;
             _hasRaisedEditorExited = false;
             _outsideEditorSinceUtc = null;
+            _editorShownAtUtc = null;
         }
 
         // 次回比較用状態を更新します。
